@@ -1,0 +1,815 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  :root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+  html,body{margin:0}
+  body{font:14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  img{max-width:100%}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<title>GXT5 Fault Trainer</title>
+<style>
+  /* Workbench: the UPS is an instrument the trainee operates with its own buttons; a test bench
+     supplies real-world events. Status colour lives inside the display. Dark device, quiet canvas. */
+  :root{
+    --canvas:#E7EAED; --panel:#F3F5F6; --sink:#DCE0E3; --ink:#161A1D; --ink-2:#596069;
+    --line:#C4CACF; --chassis:#1C1F22; --chassis-2:#2A2F34; --chassis-line:#0F1113; --etch:#8A939B;
+    --run:#2FA45A; --alarm:#E6A400; --fault:#D23B3B; --steel:#3A6EA5; --steel-soft:#E3ECF5;
+    --led-off:#3A4047; --focus:#3A6EA5; --radius:10px;
+    --font:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SFMono-Regular","Cascadia Mono",Consolas,"Liberation Mono",Menlo,monospace;
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --canvas:#121517; --panel:#1A1E21; --sink:#0E1113; --ink:#E7EAEC; --ink-2:#99A2A9;
+      --line:#2B3137; --chassis:#1A1D20; --chassis-2:#282D32; --chassis-line:#0B0D0E;
+      --etch:#7C858D; --steel:#5A8BC4; --steel-soft:#1C2A38; --led-off:#2E343A; --focus:#5A8BC4;
+      color-scheme:dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --canvas:#121517; --panel:#1A1E21; --sink:#0E1113; --ink:#E7EAEC; --ink-2:#99A2A9;
+    --line:#2B3137; --chassis:#1A1D20; --chassis-2:#282D32; --chassis-line:#0B0D0E;
+    --etch:#7C858D; --steel:#5A8BC4; --steel-soft:#1C2A38; --led-off:#2E343A; --focus:#5A8BC4;
+    color-scheme:dark;
+  }
+
+  *{box-sizing:border-box}
+  body{background:var(--canvas);color:var(--ink);font-family:var(--font);line-height:1.5;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-0.01em}
+  p{margin:0}
+  button{font-family:inherit}
+  :focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
+  .app{max-width:1080px;margin:0 auto;padding-inline:16px;padding-block:0}
+
+  .top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--canvas);
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding-block:14px;border-bottom:1px solid var(--line);margin-bottom:18px}
+  .brand{display:flex;align-items:center;gap:12px;min-width:0}
+  .brand-mark{width:34px;height:34px;border-radius:7px;background:var(--chassis);border:1px solid var(--chassis-line);flex:none;position:relative}
+  .brand-mark::before{content:"";position:absolute;left:6px;top:7px;width:7px;height:7px;border-radius:50%;background:var(--run);box-shadow:0 0 6px rgba(47,164,90,.7)}
+  .brand-mark::after{content:"";position:absolute;left:6px;bottom:7px;right:6px;height:8px;border-radius:2px;background:linear-gradient(180deg,#2b3a35,#1a2420)}
+  .brand-name{font-size:17px;font-weight:650;letter-spacing:-0.02em}
+  .brand-sub{font-size:12px;color:var(--ink-2)}
+  @media (max-width:520px){.brand-sub{display:none}}
+  .ghost{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:9px 13px;font-size:13px;font-weight:550;cursor:pointer;min-height:40px}
+  .ghost:hover{border-color:var(--steel)}
+  .ghost[aria-pressed="true"]{background:var(--steel-soft);border-color:var(--steel);color:var(--steel)}
+
+  .layout{display:grid;grid-template-columns:210px 1fr;gap:20px;align-items:start;padding-bottom:40px}
+  @media (max-width:820px){.layout{grid-template-columns:1fr;gap:16px}}
+  .rail{display:flex;flex-direction:column;gap:4px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 72px)}
+  @media (max-width:820px){.rail{position:static;flex-direction:row;overflow-x:auto;gap:6px;padding-bottom:6px;-webkit-overflow-scrolling:touch}}
+  .rail-title{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);padding:4px 8px;font-weight:600}
+  @media (max-width:820px){.rail-title{display:none}}
+  .rail button{text-align:left;background:transparent;border:1px solid transparent;border-radius:8px;padding:10px 12px;font-size:14px;color:var(--ink-2);cursor:pointer;white-space:nowrap;display:flex;gap:9px;align-items:center;font-weight:550;min-height:42px}
+  .rail button .n{font-family:var(--mono);font-size:12px;color:var(--ink-2);flex:none;width:14px}
+  .rail button .lbl{flex:1}
+  .rail button .dot{width:7px;height:7px;border-radius:50%;flex:none}
+  .rail button .dot.done{background:var(--run)}
+  .rail button .dot.lock{background:var(--ink-2)}
+  .rail button:hover{background:var(--panel);color:var(--ink)}
+  .rail button[aria-current="true"]{background:var(--panel);border-color:var(--line);color:var(--ink)}
+  .rail button[aria-current="true"] .n{color:var(--steel)}
+
+  .stage{min-width:0}
+  .scenario-head{margin-bottom:16px}
+  .scenario-title{font-size:22px;font-weight:650}
+  @media (max-width:520px){.scenario-title{font-size:20px}}
+  .scenario-situation{margin-top:6px;color:var(--ink-2);max-width:64ch}
+  .workbench{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}
+  @media (max-width:860px){.workbench{grid-template-columns:1fr}}
+
+  .device{background:linear-gradient(180deg,var(--chassis-2),var(--chassis));border:1px solid var(--chassis-line);border-radius:14px;padding:16px;box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 10px 24px rgba(0,0,0,.18)}
+  .device-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+  .device-brand{font-size:11px;letter-spacing:.14em;color:var(--etch);font-weight:600}
+  .device-model{font-size:10px;letter-spacing:.1em;color:var(--etch)}
+  .leds{display:flex;align-items:center;gap:18px;margin-bottom:12px;padding:0 2px}
+  .led-item{display:flex;align-items:center;gap:7px}
+  .led{width:12px;height:12px;border-radius:50%;background:var(--led-off);box-shadow:inset 0 0 2px rgba(0,0,0,.6);flex:none;transition:background .15s,box-shadow .15s}
+  .led.is-run{background:var(--run);box-shadow:0 0 8px rgba(47,164,90,.8)}
+  .led.is-amber{background:var(--alarm);box-shadow:0 0 8px rgba(230,164,0,.85)}
+  .led.is-red{background:var(--fault);box-shadow:0 0 9px rgba(210,59,59,.9)}
+  .led-label{font-size:10px;letter-spacing:.1em;color:var(--etch);font-weight:600}
+  .buzzer{margin-left:auto;font-size:10px;letter-spacing:.1em;font-weight:600;color:var(--led-off);border:1px solid currentColor;border-radius:5px;padding:3px 7px}
+  .buzzer.on{color:var(--alarm)}
+  .buzzer.on.pulse{animation:buzz 1s steps(1) infinite}
+  .buzzer.on.pulse.fast{animation-duration:.5s}
+  @keyframes buzz{0%{opacity:1}50%{opacity:.25}100%{opacity:1}}
+  @media (prefers-reduced-motion:reduce){.buzzer.on.pulse{animation:none}}
+
+  .lcd{background:#E6ECE7;border-radius:8px;border:2px solid #0c0e0d;padding:12px 14px;color:#13211b;font-family:var(--mono);min-height:230px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.4),inset 0 2px 10px rgba(0,0,0,.12)}
+  .lcd-pill{display:flex;align-items:center;gap:8px;border-radius:5px;padding:6px 9px;margin-bottom:10px;font-size:12px;font-weight:700;letter-spacing:.03em}
+  .lcd-pill .pd{width:10px;height:10px;border-radius:50%;flex:none}
+  .lcd-pill.ok{background:#d7ebdd;color:#1f7a43}.lcd-pill.ok .pd{background:#2fa45a;box-shadow:0 0 6px rgba(47,164,90,.6)}
+  .lcd-pill.warn{background:#f2e6c9;color:#8a5e00}.lcd-pill.warn .pd{background:#e6a400;box-shadow:0 0 6px rgba(230,164,0,.6)}
+  .lcd-pill.bad{background:#f1d6d6;color:#a62f2f}.lcd-pill.bad .pd{background:#d23b3b;box-shadow:0 0 6px rgba(210,59,59,.6)}
+  .lcd-pill.off{background:#dde3df;color:#55665d}.lcd-pill.off .pd{background:#8a938b}
+  .lcd-mode{display:flex;justify-content:space-between;align-items:baseline;gap:8px;border-bottom:1px solid rgba(0,0,0,.18);padding-bottom:8px;margin-bottom:10px}
+  .lcd-mode .m{font-size:15px;font-weight:700;letter-spacing:.02em}
+  .lcd-mode .m.ok{color:#1f7a43}.lcd-mode .m.warn{color:#9a6a00}.lcd-mode .m.bad{color:#a62f2f}
+  .lcd-mode .clock{font-size:10px;color:#55665d;letter-spacing:.04em}
+  .lcd-rows{display:flex;flex-direction:column;gap:6px;font-size:13px}
+  .lcd-row{display:flex;justify-content:space-between;gap:10px}
+  .lcd-row .k{color:#55665d}.lcd-row .v{font-weight:700;font-variant-numeric:tabular-nums}
+  .lcd-row .v.warn{color:#9a6a00}.lcd-row .v.bad{color:#a62f2f}.lcd-row .v.ok{color:#1f7a43}
+  .lcd-list{display:flex;flex-direction:column;gap:3px;font-size:13px}
+  .lcd-li{display:flex;gap:8px;padding:5px 6px;border-radius:4px}
+  .lcd-li .mk{width:9px;color:#1f7a43;font-weight:800}
+  .lcd-li.sel{background:#cfe0d6}
+  .lcd-li.sel .mk::before{content:">"}
+  .lcd-msg{display:flex;flex-direction:column;gap:8px;align-items:center;justify-content:center;text-align:center;min-height:130px}
+  .lcd-msg .big{font-size:17px;font-weight:700}
+  .lcd-msg .big.warn{color:#9a6a00}.lcd-msg .big.bad{color:#a62f2f}.lcd-msg .big.ok{color:#1f7a43}
+  .lcd-msg .sub{font-size:12px;color:#55665d;max-width:30ch}
+  .lcd-hint{margin-top:10px;font-size:10px;color:#6c7b73;border-top:1px dashed rgba(0,0,0,.18);padding-top:7px}
+  .flow svg{width:100%;height:auto;display:block}
+  .flow .seg{stroke:#9fb0a7;stroke-width:2;fill:none}
+  .flow .seg.live{stroke:#1f7a43}.flow .seg.livewarn{stroke:#9a6a00}
+  .flow .node{fill:#d7e0da;stroke:#7d8f86;stroke-width:1}
+  .flow .node.live{fill:#cfe6d8;stroke:#1f7a43}.flow .node.dim{fill:#dde3df;stroke:#b4bfb8}
+  .flow text{fill:#13211b;font-size:9px;font-family:var(--mono);font-weight:700}
+  .flow text.dim{fill:#85958c}
+
+  .buttons{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:14px}
+  .pbtn{background:linear-gradient(180deg,#34393f,#24282c);color:#cfd4d9;border:1px solid var(--chassis-line);border-radius:8px;padding:12px 4px;font-size:11px;letter-spacing:.05em;font-weight:650;cursor:pointer;box-shadow:0 1px 0 rgba(255,255,255,.06) inset,0 2px 4px rgba(0,0,0,.3);min-height:48px}
+  .pbtn:hover{color:#fff}
+  .pbtn:active{transform:translateY(1px)}
+  .btn-hint{margin-top:9px;font-size:11px;color:var(--etch);text-align:center;line-height:1.5}
+
+  .bench{margin-top:14px;background:var(--sink);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .bench-h{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);font-weight:600;margin-bottom:10px}
+  .bench-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .bench-row+.bench-row{margin-top:12px}
+  .bench-label{font-size:13px;font-weight:600}
+  .bench-sub{font-size:11px;color:var(--ink-2)}
+  .switch{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .switch button{background:var(--panel);border:none;padding:10px 15px;font-size:12px;font-weight:650;color:var(--ink-2);cursor:pointer;min-height:44px}
+  .switch button.on{background:var(--steel);color:#fff}
+  .switch.warn button.on{background:var(--alarm);color:#1b1500}
+  .stepper{display:inline-flex;align-items:center;gap:10px}
+  .stepper button{width:44px;height:44px;border-radius:8px;border:1px solid var(--line);background:var(--panel);font-size:20px;font-weight:700;color:var(--ink);cursor:pointer;line-height:1}
+  .stepper button:hover{border-color:var(--steel)}
+  .stepper .val{font-family:var(--mono);font-weight:700;min-width:64px;text-align:center;font-variant-numeric:tabular-nums}
+
+  .side{display:flex;flex-direction:column;gap:14px;min-width:0}
+  .task{background:var(--steel-soft);border:1px solid var(--steel);border-radius:var(--radius);padding:14px 16px}
+  .task.complete{background:var(--panel);border-color:var(--line)}
+  .task-h{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--steel);font-weight:700;margin-bottom:5px}
+  .task.complete .task-h{color:var(--run)}
+  .task-body{font-size:15px;font-weight:600;color:var(--ink);line-height:1.4}
+  .task-prog{margin-top:8px;font-size:12px;color:var(--ink-2);font-family:var(--mono)}
+  .debrief{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:12px}
+  .debrief h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);font-weight:600}
+  .db-item{display:flex;flex-direction:column;gap:3px}
+  .db-k{font-size:12px;font-weight:650}
+  .db-k.seeing{color:var(--steel)}.db-k.why{color:var(--ink)}
+  .db-v{font-size:14px;color:var(--ink)}
+  .restart{background:transparent;border:none;color:var(--ink-2);font-size:13px;cursor:pointer;text-decoration:underline;text-underline-offset:3px;padding:6px 2px;align-self:flex-start;min-height:40px}
+  .restart:hover{color:var(--ink)}
+
+  /* drill */
+  .drill{display:flex;flex-direction:column;gap:14px}
+  .drill-timer{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+  .drill-timer .num{font-family:var(--mono);font-size:30px;font-weight:700;font-variant-numeric:tabular-nums}
+  .drill-timer.live{border-color:var(--alarm)}
+  .drill-timer.live .num{color:var(--alarm)}
+  .bar{height:8px;border-radius:999px;background:var(--sink);overflow:hidden;margin-top:8px}
+  .bar > i{display:block;height:100%;background:var(--alarm);transition:width .95s linear}
+  .btn-primary{background:var(--steel);color:#fff;border:1px solid var(--steel);border-radius:9px;padding:13px 16px;font-size:15px;font-weight:650;cursor:pointer;min-height:48px}
+  .btn-primary:hover{filter:brightness(1.06)}
+  .result{border-radius:var(--radius);padding:16px;border:1px solid var(--line)}
+  .result.pass{background:#e4f3ea;border-color:var(--run)}
+  .result.fail{background:#f6e2e2;border-color:var(--fault)}
+  :root[data-theme="dark"] .result.pass,:root:not([data-theme="light"]) .result.pass{background:#15241b}
+  :root[data-theme="dark"] .result.fail,:root:not([data-theme="light"]) .result.fail{background:#2a1717}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .result.pass{background:#15241b}:root:not([data-theme="light"]) .result.fail{background:#2a1717}}
+  .result h3{font-size:16px;margin-bottom:6px}
+  .result.pass h3{color:var(--run)}.result.fail h3{color:var(--fault)}
+  .result p{font-size:14px;color:var(--ink)}
+
+  /* info + quiz panes */
+  .pane{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;max-width:760px}
+  .pane h2{font-size:16px;margin:18px 0 8px}
+  .pane h2:first-child{margin-top:0}
+  .pane p{margin-bottom:10px;max-width:68ch}
+  .pane ul{margin:0 0 12px;padding-left:20px}
+  .pane li{margin-bottom:7px}
+  .pane .lead{font-size:15px;color:var(--ink)}
+  .pane .note{font-size:13px;color:var(--ink-2);border-left:3px solid var(--line);padding-left:12px;margin-top:14px}
+  .seg-steps{list-style:none;padding:0;margin:8px 0 0;counter-reset:s}
+  .seg-steps li{counter-increment:s;position:relative;padding:8px 0 8px 34px;border-top:1px solid var(--line)}
+  .seg-steps li::before{content:counter(s);position:absolute;left:0;top:7px;width:24px;height:24px;border-radius:6px;background:var(--steel-soft);color:var(--steel);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+
+  .quiz-lock{display:flex;flex-direction:column;gap:14px;max-width:560px}
+  .lock-list{display:flex;flex-direction:column;gap:8px}
+  .lock-item{display:flex;align-items:center;gap:10px;font-size:14px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:var(--panel)}
+  .lock-item .st{width:10px;height:10px;border-radius:50%;flex:none;background:var(--ink-2)}
+  .lock-item.ok .st{background:var(--run)}
+  .lock-item.ok{color:var(--ink-2)}
+  .quiz{max-width:620px;display:flex;flex-direction:column;gap:16px}
+  .quiz-meta{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13px;color:var(--ink-2);font-family:var(--mono)}
+  .q-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .q-type{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--steel);font-weight:700;margin-bottom:8px}
+  .q-text{font-size:17px;font-weight:600;line-height:1.4;margin-bottom:14px}
+  .q-opts{display:flex;flex-direction:column;gap:9px}
+  .q-opt{text-align:left;background:var(--canvas);border:1px solid var(--line);border-radius:9px;padding:13px 15px;font-size:15px;color:var(--ink);cursor:pointer;min-height:48px;display:flex;align-items:center;gap:10px}
+  .q-opt:hover{border-color:var(--steel)}
+  .q-opt .mk{width:20px;height:20px;border-radius:50%;border:1px solid var(--line);flex:none;font-size:12px;display:flex;align-items:center;justify-content:center;font-weight:700}
+  .q-opt.correct{border-color:var(--run);background:rgba(47,164,90,.12)}
+  .q-opt.correct .mk{background:var(--run);color:#fff;border-color:var(--run)}
+  .q-opt.wrong{border-color:var(--fault);background:rgba(210,59,59,.12)}
+  .q-opt.wrong .mk{background:var(--fault);color:#fff;border-color:var(--fault)}
+  .q-opt[disabled]{cursor:default}
+  .q-explain{margin-top:14px;font-size:14px;color:var(--ink);background:var(--canvas);border:1px solid var(--line);border-radius:9px;padding:12px 14px}
+  .q-explain b{font-weight:650}
+  .q-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
+  .score-big{font-family:var(--mono);font-size:40px;font-weight:700}
+  .score-card{text-align:center;padding:24px}
+  .score-card.pass .score-big{color:var(--run)}
+  .score-card.fail .score-big{color:var(--fault)}
+  .score-verdict{font-size:16px;font-weight:650;margin-top:4px}
+
+  /* Desktop only: give the panel more room and enlarge the display so it reads from a distance */
+  @media (min-width:1100px){
+    .app{max-width:1320px}
+    .workbench{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}
+    .device{padding:20px}
+    .lcd{min-height:340px;padding:18px 22px}
+    .lcd-pill{font-size:14px;padding:8px 12px;margin-bottom:14px}
+    .lcd-pill .pd{width:12px;height:12px}
+    .lcd-mode{padding-bottom:10px;margin-bottom:14px}
+    .lcd-mode .m{font-size:21px}
+    .lcd-mode .clock{font-size:12px}
+    .lcd-rows,.lcd-list{font-size:17px;gap:9px}
+    .lcd-li{padding:7px 9px}
+    .lcd-msg{min-height:200px}
+    .lcd-msg .big{font-size:24px}
+    .lcd-msg .sub{font-size:15px}
+    .lcd-hint{font-size:12px}
+    .led{width:15px;height:15px}
+    .led-label,.buzzer{font-size:12px}
+    .pbtn{font-size:13px;min-height:58px}
+    .btn-hint{font-size:12px}
+  }
+
+  .foot{color:var(--ink-2);font-size:12px;border-top:1px solid var(--line);padding-block:16px 28px;margin-top:20px}
+  .foot b{color:var(--ink);font-weight:600}
+
+  /* Desktop only: give the control panel more room and enlarge the screen for readability */
+  @media (min-width:1024px){
+    .app{max-width:1280px}
+    .workbench{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}
+    .device{padding:20px}
+    .leds{gap:22px;margin-bottom:14px}
+    .led{width:14px;height:14px}
+    .led-label,.buzzer{font-size:11px}
+    .lcd{min-height:330px;padding:16px 20px}
+    .lcd-pill{font-size:14px;padding:8px 12px;margin-bottom:12px}
+    .lcd-pill .pd{width:12px;height:12px}
+    .lcd-mode{padding-bottom:10px;margin-bottom:12px}
+    .lcd-mode .m{font-size:20px}
+    .lcd-mode .clock{font-size:12px}
+    .lcd-rows,.lcd-list{font-size:16px;gap:8px}
+    .lcd-li{padding:7px 9px}
+    .lcd-msg{min-height:210px;gap:10px}
+    .lcd-msg .big{font-size:23px}
+    .lcd-msg .sub{font-size:14px}
+    .lcd-hint{font-size:12px;margin-top:12px}
+    .flow svg{max-height:230px}
+    .buttons{gap:10px;margin-top:16px}
+    .pbtn{font-size:13px;min-height:56px}
+    .btn-hint{font-size:12px}
+  }
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <div class="brand-name">GXT5 Fault Trainer</div>
+        <div class="brand-sub">Liebert GXT5 6&nbsp;kVA · serviceability checks</div>
+      </div>
+    </div>
+    <button class="ghost" id="soundBtn" aria-pressed="false" title="Play the real buzzer patterns">Sound off</button>
+  </header>
+
+  <div class="layout">
+    <nav class="rail" id="rail" aria-label="Segments"></nav>
+    <main class="stage">
+      <div class="scenario-head">
+        <h1 class="scenario-title" id="scTitle">—</h1>
+        <p class="scenario-situation" id="scSituation">—</p>
+      </div>
+
+      <div class="workbench" id="workbench">
+        <section class="device-wrap">
+          <div class="device" role="group" aria-label="GXT5 front panel">
+            <div class="device-top"><span class="device-brand">VERTIV</span><span class="device-model">LIEBERT GXT5 · 6kVA</span></div>
+            <div class="leds">
+              <div class="led-item"><span class="led" id="ledRun"></span><span class="led-label">RUN</span></div>
+              <div class="led-item"><span class="led" id="ledAlarm"></span><span class="led-label">ALARM</span></div>
+              <span class="buzzer" id="buzzer">BUZZER</span>
+            </div>
+            <div class="lcd" id="lcd" aria-live="polite"></div>
+            <div class="buttons" id="panelButtons">
+              <button class="pbtn" data-btn="power">POWER</button>
+              <button class="pbtn" data-btn="esc">ESC</button>
+              <button class="pbtn" data-btn="up">UP</button>
+              <button class="pbtn" data-btn="down">DOWN</button>
+              <button class="pbtn" data-btn="enter">ENTER</button>
+            </div>
+            <div class="btn-hint">ENTER opens the menu · UP / DOWN move · ESC goes back and silences · POWER for on / bypass</div>
+          </div>
+          <div class="bench" id="bench" hidden><div class="bench-h">Test bench</div><div id="benchRows"></div></div>
+        </section>
+        <section class="side" id="side"></section>
+      </div>
+
+      <div class="pane" id="infoPane" hidden></div>
+      <div id="quizPane" hidden></div>
+
+      <div class="foot" id="foot">
+        A practice bench, not the live unit. Behaviour follows the GXT5 manual, simplified for learning. The
+        <b>test bench</b> stands in for the real world — the mains breaker, the connected load, the cooling.
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+/*ENGINE-START*/
+var Engine = (function(){
+  "use strict";
+  var MAIN=["Status","Control","Log"];
+  var TABS=["Input","Bypass","Battery","Output","Load"];
+  function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+
+  function deriveStatus(s){
+    if(s.faultLatched) return {mode:"FAULT",run:"off",alarm:"red",buzzer:"fast"};
+    if(s.outputOff) return {mode:"OFFLINE",run:"off",alarm:"off",buzzer:"off"};
+    if(s.bypassEngaged && !s.mains) return {mode:"NOOUTPUT",run:"off",alarm:"red",buzzer:"fast"};
+    if(s.bypassEngaged) return {mode:"BYPASS",run:"on",alarm:"amber",buzzer:"slow"};
+    if(!s.mains || s.batteryTesting || s.forceBattery) return {mode:"BATTERY",run:"on",alarm:"amber",buzzer:"slow"};
+    if(s.loadKW>6) return {mode:"OVERLOAD",run:"on",alarm:"amber",buzzer:"fast"};
+    return {mode:"ONLINE",run:"on",alarm:"off",buzzer:"off"};
+  }
+  function controlItems(s){return [s.batteryTesting?"Stop battery test":"Start battery test","Clear faults",s.muted?"Unmute alarm":"Mute alarm"];}
+  function dialogOptions(s){
+    var d=deriveStatus(s);
+    if(s.bypassEngaged) return ["Turn on UPS (normal)","Turn off UPS","Cancel"];
+    if(s.faultLatched||s.outputOff||d.mode==="NOOUTPUT") return ["Turn on UPS","Cancel"];
+    return ["Turn ON to bypass","Turn off UPS","Cancel"];
+  }
+  function currentAlarms(s){
+    var d=deriveStatus(s);
+    if(d.mode==="BATTERY") return ["Battery mode"];
+    if(d.mode==="BYPASS") return ["Bypass mode"];
+    if(d.mode==="OVERLOAD") return ["Inverter overload"];
+    if(d.mode==="NOOUTPUT") return ["UPS has no output"];
+    if(d.mode==="FAULT") return [s.faultLatched];
+    return ["No active alarms"];
+  }
+  function msg(s,big,sub,tone){s.view={name:"message"};s.msg={big:big,sub:sub,tone:tone||null};}
+  function execControl(s,item){
+    if(item==="Start battery test"){ if(deriveStatus(s).mode==="ONLINE"){s.batteryTesting=true;s.lastEvent="test-start";s.view={name:"flow"};} else {msg(s,"Operation failed","Condition is not met","warn");s.lastEvent="op-failed";} }
+    else if(item==="Stop battery test"){s.batteryTesting=false;s.lastEvent="test-stop";s.view={name:"flow"};}
+    else if(item==="Clear faults"){ if(!s.faultLatched){msg(s,"No active faults","",null);s.lastEvent="clear-none";} else if(s.faultCauseActive){msg(s,"Operation failed","Condition is not met","warn");s.lastEvent="clear-failed";} else {s.faultLatched=null;s.lastEvent="clear-ok";msg(s,"Faults cleared","Ready to start","ok");} }
+    else if(item==="Mute alarm"||item==="Unmute alarm"){s.muted=(item==="Mute alarm");s.view={name:"flow"};s.lastEvent="mute";}
+  }
+  function execDialog(s,opt){
+    if(opt==="Turn ON to bypass"){ if(s.mains){s.bypassEngaged=true;s.lastEvent="to-bypass";} }
+    else if(opt==="Turn on UPS (normal)"){s.bypassEngaged=false;s.lastEvent="to-normal";}
+    else if(opt==="Turn on UPS"){s.outputOff=false;s.lastEvent="power-on";}
+    else if(opt==="Turn off UPS"){s.outputOff=true;s.lastEvent="power-off";}
+    s.view={name:"flow"};
+  }
+  function press(s,btn){
+    var v=s.view,n=v.name;
+    if(btn==="esc"){ s.muted=true; if(n==="message"||n==="dialog")s.view={name:"flow"}; else if(n==="status"||n==="control"||n==="log")s.view={name:"menu",sel:0}; else s.view={name:"flow"}; return s; }
+    if(btn==="power"){s.view={name:"dialog",sel:0};return s;}
+    if(btn==="up"||btn==="down"){ var dir=btn==="down"?1:-1;
+      if(n==="menu")v.sel=(v.sel+dir+MAIN.length)%MAIN.length;
+      else if(n==="status")v.tab=((v.tab||0)+dir+TABS.length)%TABS.length;
+      else if(n==="control"){var ci=controlItems(s);v.sel=(v.sel+dir+ci.length)%ci.length;}
+      else if(n==="dialog"){var di=dialogOptions(s);v.sel=(v.sel+dir+di.length)%di.length;}
+      return s; }
+    if(btn==="enter"){
+      if(n==="flow")s.view={name:"menu",sel:0};
+      else if(n==="menu"){ if(v.sel===0)s.view={name:"status",tab:0}; else if(v.sel===1)s.view={name:"control",sel:0}; else s.view={name:"log"}; }
+      else if(n==="control")execControl(s,controlItems(s)[v.sel]);
+      else if(n==="dialog")execDialog(s,dialogOptions(s)[v.sel]);
+      else if(n==="message")s.view={name:"flow"};
+      return s; }
+    return s;
+  }
+  function bench(s,key,payload){
+    if(key==="mains")s.mains=payload;
+    else if(key==="load")s.loadKW=clamp(Math.round((s.loadKW+payload)*10)/10,0.3,9);
+    else if(key==="cooling")s.faultCauseActive=!payload;
+    s.lastEvent="bench-"+key; return s;
+  }
+  function base(extra){ var s={mains:true,loadKW:2.7,batteryTesting:false,bypassEngaged:false,faultLatched:null,faultCauseActive:false,outputOff:false,forceBattery:false,muted:false,lastEvent:null,view:{name:"flow"}}; if(extra)for(var k in extra)s[k]=extra[k]; return s; }
+  function isStatusTab(s,tab){return s.view.name==="status"&&TABS[s.view.tab||0]===tab;}
+
+  var checks=[
+    {id:"status",title:"Status Check",
+     situation:"Learn to read the panel. The unit is on battery right now. Find the active alarm, then restore mains and confirm it is healthy.",
+     bench:["mains"],setup:function(){return base({mains:false});},
+     intro:{seeing:"Amber ALARM and one beep a second, output still on.",why:"Amber means a warning with the load still protected. Red would mean a fault — a failure. The UPS Reset check shows a red fault live."},
+     objectives:[
+       {task:"Find the active alarm. Press ENTER, open Log, then read Current alarms.",test:function(s){return s.view.name==="log";},
+        result:{seeing:"The log reads Battery mode. Amber ALARM, output still on.",why:"A logged alarm with amber and live output is a warning, not a failure."}},
+       {task:"Restore supply. Close the mains breaker on the bench.",test:function(s){return s.mains===true&&deriveStatus(s).mode==="ONLINE";},
+        result:{seeing:"Back to ON LINE, ALARM off. Current alarms now read none.",why:"With mains back in range the UPS returns to normal automatically. Green with no alarms is your baseline."}}
+     ]},
+    {id:"endurance",title:"Endurance Check",
+     situation:"Prove the UPS can carry its load on battery. Run the battery self-test from the panel and read the backup time it reports.",
+     bench:[],setup:function(){return base();},
+     intro:{seeing:"ON LINE, RUN green, ALARM off, buzzer silent. Load about 45%.",why:"Normal running: the UPS conditions mains power and keeps the battery charged."},
+     objectives:[
+       {task:"Start the battery self-test. Press ENTER, open Control, select Start battery test.",test:function(s){return s.batteryTesting===true;},
+        result:{seeing:"The display goes to ON BATTERY, amber ALARM, buzzer once a second.",why:"The UPS moved the load onto the battery to prove it can carry it. Amber is an alarm, not a fault."}},
+       {task:"Read the backup time. Press ENTER, open Status, step to the Battery tab.",test:function(s){return isStatusTab(s,"Battery");},
+        result:{seeing:"Battery tab shows Discharging, a backup time, and remaining capacity.",why:"Backup time is how long the battery holds this load. It falls with a heavier load or aged batteries."}},
+       {task:"End the test. Go back to Control and select Stop battery test.",test:function(s){return s.batteryTesting===false&&deriveStatus(s).mode==="ONLINE";},
+        result:{seeing:"Back to ON LINE, ALARM off.",why:"Check done and the UPS recharges. In a real outage, a low-battery pre-warning gives about two minutes before end-of-discharge."}}
+     ]},
+    {id:"load",title:"Load Utilisation Check",
+     situation:"Check how much of the 6 kVA / 6 kW the load draws, then push it into overload. Power factor is 1.0, so the kVA and kW limits are both 6.",
+     bench:["load"],setup:function(){return base({loadKW:2.7});},
+     intro:{seeing:"ON LINE, load about 45%.",why:"Normal running. Read the Load tab, then raise the connected load on the bench."},
+     objectives:[
+       {task:"Open the Load tab. Press ENTER, open Status, step to the Load tab.",test:function(s){return isStatusTab(s,"Load");},
+        result:{seeing:"Load percent, Sout and Pout (equal), and PF 1.00.",why:"Because PF is 1.0, kVA equals kW — watch the single Load % figure."}},
+       {task:"Raise the connected load past 100% with the bench LOAD control.",test:function(s){return s.loadKW>6;},
+        result:{seeing:"Over 100%: Inverter overload, amber ALARM, fast buzzer.",why:"The overload timer is running. Reduce within a few seconds or the UPS transfers to bypass, or powers off if bypass is unavailable."}},
+       {task:"Bring the load back under the limit with the bench LOAD control.",test:function(s){return s.loadKW<=6;},
+        result:{seeing:"Back under the limit, ALARM off.",why:"With the overload cleared the UPS returns to normal inverter operation."}}
+     ]},
+    {id:"bypass",title:"Bypass",
+     situation:"Transfer the load to bypass and back, and see the key lesson: on bypass the load runs straight from mains with no battery backup.",
+     bench:["mains"],setup:function(){return base();},
+     intro:{seeing:"ON LINE, protected by the inverter.",why:"Bypass sends the load straight from mains through the static switch, skipping the inverter."},
+     objectives:[
+       {task:"Transfer to bypass. Press POWER, then select Turn ON to bypass.",test:function(s){return s.bypassEngaged===true&&s.mains===true;},
+        result:{seeing:"ON BYPASS, RUN green, amber ALARM, one beep a second.",why:"The load is fed from raw mains. The inverter is idle, so there is no conditioning and no battery backup."}},
+       {task:"Open the mains breaker while on bypass, and watch the output.",test:function(s){return s.bypassEngaged===true&&s.mains===false;},
+        result:{seeing:"Output drops: UPS has no output. RUN off, red ALARM, fast buzzer.",why:"On bypass the battery is out of the path, so a mains loss drops the load at once."}},
+       {task:"Recover. Close the breaker, press POWER, select Turn on UPS (normal).",test:function(s){return s.bypassEngaged===false&&s.mains===true&&deriveStatus(s).mode==="ONLINE";},
+        result:{seeing:"Back to ON LINE, protected again.",why:"With the inverter back in the path the load has conditioning and battery backup once more."}}
+     ]},
+    {id:"reset",title:"UPS Reset",
+     situation:"A fault has shut the output down. Learn that a reset is not a repair: Clear faults only works once the cause is gone.",
+     bench:["cooling"],setup:function(){return base({faultLatched:"System over temp",faultCauseActive:true,outputOff:true});},
+     intro:{seeing:"System over temp. RUN off, red ALARM, fast buzzer.",why:"The UPS shut the inverter down to protect itself. The cause is still present (cooling is blocked)."},
+     objectives:[
+       {task:"Try to clear it now. Press ENTER, open Control, select Clear faults.",test:function(s){return s.lastEvent==="clear-failed";},
+        result:{seeing:"The panel refuses: Operation failed, condition is not met. The fault stays.",why:"Clearing does nothing while the cause is still present. A reset is not a repair."}},
+       {task:"Fix the cause. Set the bench COOLING to OK to restore airflow.",test:function(s){return s.faultCauseActive===false;},
+        result:{seeing:"Heat-sink back in range. The fault is no longer active, only latched.",why:"With the cause gone, the fault can now be cleared."}},
+       {task:"Clear the fault. Press ENTER, open Control, select Clear faults.",test:function(s){return s.lastEvent==="clear-ok"&&!s.faultLatched;},
+        result:{seeing:"Faults cleared, ALARM off. The unit is in standby.",why:"Clearing works now because the cause is resolved."}},
+       {task:"Start the UPS. Press POWER, then select Turn on UPS.",test:function(s){return deriveStatus(s).mode==="ONLINE";},
+        result:{seeing:"Back to ON LINE.",why:"The UPS restarts into normal operation with the load protected."}}
+     ]}
+  ];
+
+  var quiz=[
+    {type:"mcq",q:"An amber ALARM with the load still powered means:",opts:["A fault that needs service","A warning — the load is still protected","The UPS has switched off","Nothing, it is normal"],answer:1,explain:"Amber is a warning (on battery, on bypass, overload). The load is still supplied. Red is a fault."},
+    {type:"tf",q:"A red fault indicator means the UPS has failed and usually needs service, not just a reset.",answer:0,explain:"Red marks a failure. Clearing the fault does not repair it — the cause must be fixed first."},
+    {type:"mcq",q:"Because the GXT5 power factor is 1.0, its 6 kVA rating equals:",opts:["3 kW","6 kW","9 kW","12 kW"],answer:1,explain:"At unity power factor kVA equals kW, so 6 kVA is 6 kW — watch the single Load % figure."},
+    {type:"mcq",q:"While the UPS is ON BYPASS and mains fails, the load:",opts:["Stays protected on battery","Is lost — bypass has no battery backup","Switches back to the inverter","Is unaffected"],answer:1,explain:"On bypass the battery is out of the path, so a mains loss drops the load immediately."},
+    {type:"tf",q:"Clear faults will clear a fault even while the cause is still present.",answer:1,explain:"False. Clear faults only works once the cause is resolved. A reset is not a repair."},
+    {type:"mcq",q:"The battery low pre-warning gives roughly how long before end-of-discharge at full load:",opts:["About 2 minutes","About 30 minutes","About 2 hours","No warning is given"],answer:0,explain:"The pre-warning gives about two minutes to shut equipment down in order before the UPS stops."},
+    {type:"mcq",q:"To read remaining runtime during an outage, which tab do you open?",opts:["Status → Load","Status → Battery","Control","Log"],answer:1,explain:"Status → Battery shows backup time and remaining capacity."},
+    {type:"tf",q:"Transferring to bypass gives the same power conditioning as normal double-conversion mode.",answer:1,explain:"False. Bypass feeds the load from raw mains with no conditioning and no battery backup."},
+    {type:"mcq",q:"The endurance check is performed by:",opts:["Increasing the load until it trips","Running the battery self-test and reading the backup time","Clearing faults","Muting the alarm"],answer:1,explain:"Endurance is about battery autonomy — run on battery and read how long it holds the load."},
+    {type:"mcq",q:"An internal alarm drops the UPS to battery while mains is still available. To keep the load up you should:",opts:["Do nothing and wait","Transfer to bypass without delay","Switch the UPS off","Add more load"],answer:1,explain:"With mains present, transferring to bypass keeps the load on mains while the battery would otherwise run down."}
+  ];
+
+  return {MAIN:MAIN,TABS:TABS,deriveStatus:deriveStatus,controlItems:controlItems,dialogOptions:dialogOptions,currentAlarms:currentAlarms,press:press,bench:bench,checks:checks,quiz:quiz,clamp:clamp,base:base};
+})();
+/*ENGINE-END*/
+if(typeof module!=="undefined"&&module.exports){module.exports=Engine;}
+
+if(typeof document!=="undefined"){ (function(){
+  "use strict";
+  var E=Engine;
+  var DRILL_SECS=15, QUIZ_PASS=8;
+
+  var SEGMENTS=[
+    {id:"maintenance",title:"Maintenance",kind:"info"},
+    {id:"status",title:"Status Check",kind:"check"},
+    {id:"endurance",title:"Endurance Check",kind:"check"},
+    {id:"load",title:"Load Utilisation",kind:"check"},
+    {id:"bypass",title:"Bypass",kind:"check"},
+    {id:"reset",title:"UPS Reset",kind:"check"},
+    {id:"scenario",title:"Scenario Test",kind:"scenario"},
+    {id:"quiz",title:"Quiz",kind:"quiz"}
+  ];
+  var REQUIRED=["maintenance","status","endurance","load","bypass","reset","scenario"];
+  function checkById(id){for(var i=0;i<E.checks.length;i++)if(E.checks[i].id===id)return E.checks[i];return null;}
+
+  // completion (persisted best-effort)
+  var done={};
+  try{var raw=localStorage.getItem("gxt5_done");if(raw)(JSON.parse(raw)||[]).forEach(function(x){done[x]=true;});}catch(e){}
+  function markDone(id){ if(done[id])return; done[id]=true; try{localStorage.setItem("gxt5_done",JSON.stringify(Object.keys(done)));}catch(e){} renderRail(); }
+  function quizUnlocked(){return REQUIRED.every(function(id){return done[id];});}
+
+  // ---- flow diagram ----
+  function flow(mode){
+    var live={mains:false,ups:false,load:false,batt:false,bypass:false,warn:false};
+    if(mode==="ONLINE"||mode==="OVERLOAD"){live={mains:true,ups:true,load:true,warn:mode==="OVERLOAD"};}
+    else if(mode==="BATTERY"){live={batt:true,ups:true,load:true,warn:true};}
+    else if(mode==="BYPASS"){live={mains:true,bypass:true,load:true,warn:true};}
+    var seg=function(on){return on?(live.warn?"seg livewarn":"seg live"):"seg";};
+    var nd=function(on,dim){return on?"node live":(dim?"node dim":"node");};
+    var off=(mode==="NOOUTPUT"||mode==="OFFLINE"||mode==="FAULT");
+    return '<div class="flow"><svg viewBox="0 0 300 120" role="img" aria-label="Power path">'+
+      '<path class="'+(live.bypass?"seg livewarn":"seg")+'" d="M40 40 C 110 8, 190 8, 260 40"/><text x="150" y="11" text-anchor="middle" class="'+(live.bypass?"":"dim")+'">BYPASS</text>'+
+      '<line class="'+seg(live.mains)+'" x1="60" y1="60" x2="110" y2="60"/><line class="'+seg(live.load)+'" x1="190" y1="60" x2="240" y2="60"/>'+
+      '<line class="'+(live.batt?"seg livewarn":"seg")+'" x1="150" y1="98" x2="150" y2="80"/>'+
+      '<rect class="'+nd(live.mains)+'" x="18" y="48" width="42" height="24" rx="3"/><text x="39" y="63" text-anchor="middle">MAINS</text>'+
+      '<rect class="'+nd(live.ups)+'" x="110" y="44" width="80" height="32" rx="3"/><text x="150" y="58" text-anchor="middle">RECT / INV</text><text x="150" y="69" text-anchor="middle" class="dim">UPS</text>'+
+      '<rect class="'+nd(live.load,off)+'" x="240" y="48" width="44" height="24" rx="3"/><text x="262" y="63" text-anchor="middle" class="'+(off?"dim":"")+'">LOAD</text>'+
+      '<rect class="'+(live.batt?"node live":"node")+'" x="128" y="98" width="44" height="20" rx="3"/><text x="150" y="111" text-anchor="middle">BATT</text></svg></div>';
+  }
+  function statusPill(s){
+    var d=E.deriveStatus(s),cls,label;
+    if(d.mode==="FAULT"){cls="bad";label="FAULT";}
+    else if(d.mode==="NOOUTPUT"){cls="bad";label="NO OUTPUT";}
+    else if(d.mode==="OFFLINE"){cls="off";label="STANDBY";}
+    else if(d.mode==="BATTERY"){cls="warn";label="ALARM · ON BATTERY";}
+    else if(d.mode==="BYPASS"){cls="warn";label="ALARM · ON BYPASS";}
+    else if(d.mode==="OVERLOAD"){cls="warn";label="ALARM · OVERLOAD";}
+    else {cls="ok";label="NORMAL";}
+    return '<div class="lcd-pill '+cls+'"><span class="pd"></span>'+label+'</div>';
+  }
+  function li(text,sel){return '<div class="lcd-li'+(sel?" sel":"")+'"><span class="mk"></span><span>'+text+'</span></div>';}
+  function listScreen(title,items,sel,sub){var h='<div class="lcd-mode"><span class="m">'+title+'</span>'+(sub?'<span class="clock">'+sub+'</span>':'')+'</div><div class="lcd-list">';for(var i=0;i<items.length;i++)h+=li(items[i],i===sel);return h+'</div>';}
+  function statusTab(s,tab){
+    var d=E.deriveStatus(s),rows=[],out=(d.mode==="NOOUTPUT"||d.mode==="OFFLINE"||d.mode==="FAULT"),pct=Math.round(s.loadKW/6*100),discharging=(d.mode==="BATTERY");
+    if(tab==="Input")rows=[["L-N voltage",s.mains?"230 V":"--- V"],["Frequency",s.mains?"50.0 Hz":"--- Hz"]];
+    else if(tab==="Bypass")rows=[["L-N voltage",s.mains?"230 V":"--- V"],["Frequency",s.mains?"50.0 Hz":"--- Hz"]];
+    else if(tab==="Battery"){var bk=Math.max(1,Math.round(54/Math.max(s.loadKW,0.5)));rows=[["Status",discharging?"Discharging":"Float charging"],["Backup time",discharging?(bk+" min"):"--"],["Remaining cap.",discharging?"86%":"100%"]];}
+    else if(tab==="Output")rows=[["L-N voltage",out?"0 V":"230 V"],["Frequency",out?"--- Hz":"50.0 Hz"],["Load",out?"0%":(pct+"%")]];
+    else rows=[["Load percent",out?"0%":(pct+"%")],["Sout",out?"0.00 kVA":(s.loadKW.toFixed(2)+" kVA")],["Pout",out?"0.00 kW":(s.loadKW.toFixed(2)+" kW")],["Power factor","1.00"]];
+    var h='<div class="lcd-mode"><span class="m">STATUS</span><span class="clock">'+tab+'  ('+(E.TABS.indexOf(tab)+1)+'/5)</span></div><div class="lcd-rows">';
+    for(var i=0;i<rows.length;i++){var lw=(rows[i][0]==="Load percent"||rows[i][0]==="Load");var warn=lw&&pct>=100?" bad":(lw&&pct>=85?" warn":"");h+='<div class="lcd-row"><span class="k">'+rows[i][0]+'</span><span class="v'+warn+'">'+rows[i][1]+'</span></div>';}
+    return h+'</div><div class="lcd-hint">UP / DOWN change tab · ESC goes back</div>';
+  }
+  function flowScreen(s){
+    var d=E.deriveStatus(s);
+    if(d.mode==="FAULT")return '<div class="lcd-msg"><div class="big bad">'+s.faultLatched+'</div><div class="sub">Inverter off. Press ENTER for Control.</div></div>';
+    if(d.mode==="OFFLINE")return '<div class="lcd-msg"><div class="big">Standby</div><div class="sub">Output off. Press POWER to start.</div></div>';
+    var modeText={ONLINE:"ON LINE",BATTERY:"ON BATTERY",BYPASS:"ON BYPASS",OVERLOAD:"OVERLOAD",NOOUTPUT:"NO OUTPUT"}[d.mode];
+    var cls=d.mode==="ONLINE"?"ok":(d.mode==="NOOUTPUT"?"bad":"warn"),pct=Math.round(s.loadKW/6*100);
+    var rows='<div class="lcd-row"><span class="k">Load</span><span class="v'+(pct>=100?" bad":(pct>=85?" warn":""))+'">'+pct+'%</span></div>';
+    if(d.mode==="BATTERY"){var bk=Math.max(1,Math.round(54/Math.max(s.loadKW,0.5)));rows+='<div class="lcd-row"><span class="k">Backup time</span><span class="v">'+bk+' min</span></div>';}
+    return '<div class="lcd-mode"><span class="m '+cls+'">'+modeText+'</span><span class="clock">Press ENTER for menu</span></div>'+flow(d.mode)+'<div class="lcd-rows" style="margin-top:8px">'+rows+'</div>';
+  }
+  function renderLCD(s){
+    var v=s.view,body;
+    if(v.name==="message")body='<div class="lcd-msg"><div class="big'+(s.msg.tone?(" "+s.msg.tone):"")+'">'+s.msg.big+'</div>'+(s.msg.sub?'<div class="sub">'+s.msg.sub+'</div>':'')+'<div class="lcd-hint" style="border:none">Press ENTER or ESC</div></div>';
+    else if(v.name==="menu")body=listScreen("MAIN MENU",E.MAIN,v.sel,"ENTER selects");
+    else if(v.name==="control")body=listScreen("CONTROL",E.controlItems(s),v.sel,"ENTER selects");
+    else if(v.name==="dialog")body=listScreen("POWER",E.dialogOptions(s),v.sel,"ENTER selects");
+    else if(v.name==="log")body='<div class="lcd-mode"><span class="m">CURRENT ALARMS</span></div><div class="lcd-list">'+E.currentAlarms(s).map(function(a){return li(a,false);}).join("")+'</div><div class="lcd-hint">ESC goes back</div>';
+    else if(v.name==="status")body=statusTab(s,E.TABS[v.tab||0]);
+    else body=flowScreen(s);
+    return statusPill(s)+body;
+  }
+
+  // ---- buzzer ----
+  var soundOn=false,actx=null,buzzTimer=null;
+  function beep(dur){if(!actx)return;var o=actx.createOscillator(),g=actx.createGain();o.type="square";o.frequency.value=2000;g.gain.setValueAtTime(0.0001,actx.currentTime);g.gain.exponentialRampToValueAtTime(0.12,actx.currentTime+0.01);g.gain.exponentialRampToValueAtTime(0.0001,actx.currentTime+dur);o.connect(g);g.connect(actx.destination);o.start();o.stop(actx.currentTime+dur+0.02);}
+  function setBuzzer(mode,audible){if(buzzTimer){clearInterval(buzzTimer);buzzTimer=null;}if(!soundOn||!audible||!mode||mode==="off")return;var every=mode==="fast"?500:1000,len=mode==="fast"?0.09:0.12;beep(len);buzzTimer=setInterval(function(){beep(len);},every);}
+  function stopBuzzer(){if(buzzTimer){clearInterval(buzzTimer);buzzTimer=null;}}
+  document.getElementById("soundBtn").addEventListener("click",function(){soundOn=!soundOn;this.setAttribute("aria-pressed",soundOn?"true":"false");this.textContent=soundOn?"Sound on":"Sound off";if(soundOn&&!actx){try{actx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){actx=null;}}if(soundOn&&actx&&actx.state==="suspended")actx.resume();if(seg&&(seg.kind==="check"||seg.kind==="scenario"))renderDevice();});
+
+  // ---- DOM refs ----
+  var el={title:document.getElementById("scTitle"),sit:document.getElementById("scSituation"),
+    workbench:document.getElementById("workbench"),infoPane:document.getElementById("infoPane"),quizPane:document.getElementById("quizPane"),
+    run:document.getElementById("ledRun"),al:document.getElementById("ledAlarm"),bz:document.getElementById("buzzer"),
+    lcd:document.getElementById("lcd"),bench:document.getElementById("bench"),benchRows:document.getElementById("benchRows"),
+    side:document.getElementById("side"),foot:document.getElementById("foot"),rail:document.getElementById("rail")};
+
+  // ---- shared state ----
+  var seg=null,state=null,scenario=null,progress=0,lastResult=null,drillTimer=null,drillLeft=0,drillOver=false,quizState=null;
+
+  function renderDevice(){
+    var d=E.deriveStatus(state);
+    el.run.className="led"+(d.run==="on"?" is-run":"");
+    el.al.className="led"+(d.alarm==="amber"?" is-amber":(d.alarm==="red"?" is-red":""));
+    var active=d.buzzer&&d.buzzer!=="off",audible=active&&!state.muted;
+    el.bz.className="buzzer"+(active?" on"+(audible?" pulse":"")+(d.buzzer==="fast"?" fast":""):"");
+    el.bz.textContent=active?(state.muted?"BUZZER (muted)":"BUZZER"):"BUZZER";
+    el.lcd.innerHTML=renderLCD(state);
+    setBuzzer(d.buzzer,audible);
+  }
+  function renderBench(keys){
+    if(!keys||!keys.length){el.bench.hidden=true;el.benchRows.innerHTML="";return;}
+    el.bench.hidden=false;var h="";
+    if(keys.indexOf("mains")>=0)h+='<div class="bench-row"><div><div class="bench-label">Mains breaker</div><div class="bench-sub">The supply feeding the UPS</div></div><span class="switch warn"><button data-bench="mains" data-val="1" class="'+(state.mains?"on":"")+'">CLOSED</button><button data-bench="mains" data-val="0" class="'+(!state.mains?"on":"")+'">OPEN</button></span></div>';
+    if(keys.indexOf("load")>=0)h+='<div class="bench-row"><div><div class="bench-label">Connected load</div><div class="bench-sub">Equipment drawing from the UPS</div></div><span class="stepper"><button data-bench="load" data-val="-1.5" aria-label="Reduce load">−</button><span class="val">'+state.loadKW.toFixed(1)+' kW</span><button data-bench="load" data-val="1.5" aria-label="Increase load">+</button></span></div>';
+    if(keys.indexOf("cooling")>=0)h+='<div class="bench-row"><div><div class="bench-label">Cooling / airflow</div><div class="bench-sub">Blocked airflow caused the over-temp</div></div><span class="switch warn"><button data-bench="cooling" data-val="0" class="'+(state.faultCauseActive?"on":"")+'">BLOCKED</button><button data-bench="cooling" data-val="1" class="'+(!state.faultCauseActive?"on":"")+'">OK</button></span></div>';
+    el.benchRows.innerHTML=h;
+  }
+
+  // ---- CHECK segment ----
+  function renderCheckSide(){
+    var objs=scenario.objectives,fin=progress>=objs.length,r=lastResult||{};
+    var h='<div class="task'+(fin?" complete":"")+'"><div class="task-h">'+(fin?"Check complete":"Your task")+'</div>'+
+      '<div class="task-body">'+(fin?"You have worked through this check. Pick another from the list, or restart.":objs[progress].task)+'</div>'+
+      '<div class="task-prog">'+(fin?(objs.length+" / "+objs.length):("Step "+(progress+1)+" of "+objs.length))+'</div></div>';
+    h+='<div class="debrief"><h2>Read-out</h2>'+
+      '<div class="db-item"><span class="db-k seeing">What you are seeing</span><p class="db-v">'+(r.seeing||"")+'</p></div>'+
+      '<div class="db-item"><span class="db-k why">Why</span><p class="db-v">'+(r.why||"")+'</p></div></div>';
+    h+='<button class="restart" id="restartBtn">Restart this check</button>';
+    el.side.innerHTML=h;
+    document.getElementById("restartBtn").addEventListener("click",function(){loadSegment(segIndex());});
+  }
+  function evalObjectives(){var objs=scenario.objectives;while(progress<objs.length&&objs[progress].test(state)){lastResult=objs[progress].result;progress++;}if(progress>=objs.length)markDone(scenario.id);}
+  function checkAct(fn){fn();evalObjectives();renderDevice();renderBench(scenario.bench);renderCheckSide();}
+
+  // ---- SCENARIO drill ----
+  function clearDrill(){if(drillTimer){clearInterval(drillTimer);drillTimer=null;}}
+  function renderDrillSide(phase){
+    // phase: "ready" | "live" | "pass" | "fail"
+    var h="";
+    if(phase==="ready"){
+      h='<div class="drill"><div class="task"><div class="task-h">Scenario drill</div><div class="task-body">An internal alarm has dropped the UPS onto battery while mains is still available. When the alarm sounds, secure the load on bypass before the battery runs down.</div><div class="task-prog">Correct action: POWER → Turn ON to bypass</div></div>'+
+        '<button class="btn-primary" id="drillStart">Start drill</button></div>';
+    } else if(phase==="live"){
+      var pctbar=Math.round(drillLeft/DRILL_SECS*100);
+      h='<div class="drill"><div class="drill-timer live"><div><div class="task-h" style="color:var(--alarm)">Alarm active — act now</div><div class="bench-sub">Transfer to bypass before time runs out</div></div><div class="num">'+drillLeft+'s</div></div>'+
+        '<div class="bar"><i style="width:'+pctbar+'%"></i></div>'+
+        '<div class="debrief"><div class="db-item"><span class="db-k why">On the panel</span><p class="db-v">Press POWER, then select Turn ON to bypass and confirm with ENTER.</p></div></div></div>';
+    } else if(phase==="pass"){
+      h='<div class="drill"><div class="result pass"><h3>Load secured</h3><p>You transferred to bypass in time, so the load keeps running from mains while the fault is investigated. On the real unit you would then raise the fault for servicing.</p></div><button class="btn-primary" id="drillStart">Run again</button></div>';
+    } else {
+      h='<div class="drill"><div class="result fail"><h3>Load lost</h3><p>The battery ran down before you transferred to bypass, so the output dropped. When an alarm puts the UPS on battery with mains available, go to bypass without delay.</p></div><button class="btn-primary" id="drillStart">Try again</button></div>';
+    }
+    el.side.innerHTML=h;
+    var sb=document.getElementById("drillStart");
+    if(sb)sb.addEventListener("click",startDrill);
+  }
+  function startDrill(){
+    clearDrill();drillOver=false;drillLeft=DRILL_SECS;
+    state=E.base({forceBattery:true});state.view={name:"flow"};
+    renderDevice();renderDrillSide("live");
+    drillTimer=setInterval(function(){
+      drillLeft--;
+      if(E.deriveStatus(state).mode==="BYPASS"){clearDrill();drillOver=true;markDone("scenario");renderDevice();renderDrillSide("pass");return;}
+      if(drillLeft<=0){clearDrill();drillOver=true;stopBuzzer();renderDrillSide("fail");return;}
+      renderDrillSide("live");
+    },1000);
+  }
+  function drillPress(btn){
+    if(drillOver||!drillTimer)return;
+    E.press(state,btn);renderDevice();
+    if(E.deriveStatus(state).mode==="BYPASS"){clearDrill();drillOver=true;markDone("scenario");renderDrillSide("pass");}
+  }
+
+  // ---- INFO segment ----
+  function renderInfo(){
+    el.infoPane.innerHTML=
+      '<p class="lead">Serviceability checks confirm the UPS will protect its load and can be maintained safely. Work through them in order; each one has its own segment in this trainer.</p>'+
+      '<h2>Before you touch anything</h2>'+
+      '<ul><li>The GXT5 carries hazardous voltages and has no user-serviceable parts inside. Do not open the chassis.</li>'+
+      '<li>Batteries carry a shock and short-circuit risk even with mains removed. Follow lockout and the correct PPE.</li>'+
+      '<li>Keep at least 100&nbsp;mm clearance at the front and rear, and keep the air inlets clear.</li></ul>'+
+      '<h2>The serviceability sequence</h2>'+
+      '<ol class="seg-steps"><li><b>Status check</b> — read the LEDs, the mode and the log; tell an alarm from a fault.</li>'+
+      '<li><b>Endurance check</b> — run the battery self-test and confirm the backup time.</li>'+
+      '<li><b>Load utilisation check</b> — confirm the load is within the 6&nbsp;kW rating.</li>'+
+      '<li><b>Bypass</b> — transfer to bypass and back; know that bypass gives no battery backup.</li>'+
+      '<li><b>UPS reset (power on/off)</b> — clear a fault once its cause is fixed, and start the unit.</li></ol>'+
+      '<h2>Routine care</h2>'+
+      '<ul><li>Keep the UPS plugged in so the batteries stay charged, and operate it around 15–25&nbsp;°C for battery life.</li>'+
+      '<li>Check the display and log for active alarms, and note the battery replacement date.</li>'+
+      '<li>A red fault means service (Vertiv), not a field repair.</li></ul>'+
+      '<p class="note">Work through all the segments, then the Quiz unlocks. The Scenario Test is a timed drill — react to the alarm.</p>';
+    markDone("maintenance");
+  }
+
+  // ---- QUIZ segment ----
+  function renderQuizLocked(){
+    var items=REQUIRED.map(function(id){var t=(SEGMENTS.filter(function(s){return s.id===id;})[0]||{}).title||id;return '<div class="lock-item'+(done[id]?" ok":"")+'"><span class="st"></span>'+t+(done[id]?" — done":"")+'</div>';}).join("");
+    el.quizPane.innerHTML='<div class="pane"><div class="quiz-lock"><h2 style="margin:0">Quiz is locked</h2><p>Finish every segment below to unlock the quiz. You need '+QUIZ_PASS+' out of '+E.quiz.length+' to pass, and you can retry.</p><div class="lock-list">'+items+'</div></div></div>';
+  }
+  function startQuiz(){quizState={i:0,score:0,answered:false,picked:-1};renderQuiz();}
+  function renderQuiz(){
+    var qs=E.quiz,q=qs[quizState.i];
+    if(quizState.i>=qs.length){renderQuizResult();return;}
+    var opts=q.type==="tf"?["True","False"]:q.opts;
+    var letters=["A","B","C","D"];
+    var h='<div class="quiz"><div class="quiz-meta"><span>Question '+(quizState.i+1)+' of '+qs.length+'</span><span>Score '+quizState.score+'</span></div>'+
+      '<div class="q-card"><div class="q-type">'+(q.type==="tf"?"True / False":"Multiple choice")+'</div><div class="q-text">'+q.q+'</div><div class="q-opts" id="qOpts">';
+    for(var i=0;i<opts.length;i++){
+      var cls="q-opt",mk=(q.type==="tf"?"":letters[i]);
+      if(quizState.answered){ if(i===q.answer)cls+=" correct"; else if(i===quizState.picked)cls+=" wrong"; }
+      h+='<button class="'+cls+'" data-opt="'+i+'"'+(quizState.answered?" disabled":"")+'><span class="mk">'+(quizState.answered&&i===q.answer?"✓":(quizState.answered&&i===quizState.picked?"✗":mk))+'</span><span>'+opts[i]+'</span></button>';
+    }
+    h+='</div>';
+    if(quizState.answered){
+      var ok=quizState.picked===q.answer;
+      h+='<div class="q-explain"><b>'+(ok?"Correct.":"Not quite.")+'</b> '+q.explain+'</div>'+
+        '<div class="q-actions"><button class="btn-primary" id="qNext">'+(quizState.i===qs.length-1?"See result":"Next question")+'</button></div>';
+    }
+    h+='</div></div>';
+    el.quizPane.innerHTML='<div class="pane">'+h+'</div>';
+    if(!quizState.answered){
+      el.quizPane.querySelector("#qOpts").addEventListener("click",function(e){
+        var b=e.target.closest("button[data-opt]");if(!b)return;
+        quizState.picked=parseInt(b.getAttribute("data-opt"),10);quizState.answered=true;
+        if(quizState.picked===q.answer)quizState.score++;
+        renderQuiz();
+      });
+    } else {
+      el.quizPane.querySelector("#qNext").addEventListener("click",function(){quizState.i++;quizState.answered=false;quizState.picked=-1;renderQuiz();});
+    }
+  }
+  function renderQuizResult(){
+    var total=E.quiz.length,pass=quizState.score>=QUIZ_PASS;
+    el.quizPane.innerHTML='<div class="pane"><div class="score-card '+(pass?"pass":"fail")+'">'+
+      '<div class="score-big">'+quizState.score+' / '+total+'</div>'+
+      '<div class="score-verdict" style="color:'+(pass?"var(--run)":"var(--fault)")+'">'+(pass?"Passed":"Not yet — "+QUIZ_PASS+" needed to pass")+'</div>'+
+      '<p style="margin-top:10px;color:var(--ink-2)">'+(pass?"You cleared the knowledge check. Review any check whenever you like.":"Review the checks and try again.")+'</p>'+
+      '<div style="margin-top:16px"><button class="btn-primary" id="qRetry">Retry quiz</button></div></div></div>';
+    if(pass)markDone("quiz");
+    el.quizPane.querySelector("#qRetry").addEventListener("click",startQuiz);
+  }
+
+  // ---- rail + segment switching ----
+  function segIndex(){for(var i=0;i<SEGMENTS.length;i++)if(SEGMENTS[i].id===seg.id)return i;return 0;}
+  function renderRail(){
+    var h="";
+    for(var i=0;i<SEGMENTS.length;i++){
+      var s=SEGMENTS[i],cur=seg&&seg.id===s.id,n=i+1;
+      var dotCls=done[s.id]?"dot done":(s.kind==="quiz"&&!quizUnlocked()?"dot lock":"dot");
+      var showDot=done[s.id]||(s.kind==="quiz"&&!quizUnlocked());
+      h+='<button data-go="'+i+'" aria-current="'+(cur?"true":"false")+'"><span class="n">'+n+'</span><span class="lbl">'+s.title+'</span>'+(showDot?'<span class="'+dotCls+'"></span>':'')+'</button>';
+    }
+    el.rail.innerHTML=h;
+  }
+
+  function showPanes(kind){
+    var isDevice=(kind==="check"||kind==="scenario");
+    el.workbench.hidden=!isDevice;
+    el.infoPane.hidden=(kind!=="info");
+    el.quizPane.hidden=(kind!=="quiz");
+    el.foot.hidden=(kind==="info"||kind==="quiz");
+    if(!isDevice){stopBuzzer();}
+  }
+
+  function loadSegment(i){
+    clearDrill();stopBuzzer();
+    seg=SEGMENTS[i];
+    el.title.textContent=seg.title;
+    renderRail();
+    if(seg.kind==="check"){
+      scenario=checkById(seg.id);state=scenario.setup();progress=0;lastResult=scenario.intro;
+      el.sit.textContent=scenario.situation;
+      showPanes("check");evalObjectives();renderDevice();renderBench(scenario.bench);renderCheckSide();
+    } else if(seg.kind==="scenario"){
+      scenario=null;state=E.base({forceBattery:true});drillOver=false;
+      el.sit.textContent="A timed drill. Read the brief, start it, and react to the alarm on the panel.";
+      showPanes("scenario");renderBench(null);renderDevice();renderDrillSide("ready");
+    } else if(seg.kind==="info"){
+      el.sit.textContent="Describe the procedure for UPS serviceability and maintenance.";
+      showPanes("info");renderInfo();
+    } else if(seg.kind==="quiz"){
+      el.sit.textContent="Multiple choice and true / false. "+QUIZ_PASS+" out of "+E.quiz.length+" to pass.";
+      showPanes("quiz");
+      if(quizUnlocked())startQuiz(); else renderQuizLocked();
+    }
+  }
+
+  // ---- events ----
+  document.getElementById("panelButtons").addEventListener("click",function(e){
+    var b=e.target.closest(".pbtn");if(!b)return;var btn=b.getAttribute("data-btn");
+    if(seg.kind==="check")checkAct(function(){E.press(state,btn);});
+    else if(seg.kind==="scenario")drillPress(btn);
+  });
+  el.benchRows.addEventListener("click",function(e){
+    var b=e.target.closest("button[data-bench]");if(!b||seg.kind!=="check")return;
+    var key=b.getAttribute("data-bench"),val=b.getAttribute("data-val");
+    checkAct(function(){ if(key==="mains")E.bench(state,"mains",val==="1"); else if(key==="cooling")E.bench(state,"cooling",val==="1"); else if(key==="load")E.bench(state,"load",parseFloat(val)); });
+  });
+  el.rail.addEventListener("click",function(e){var b=e.target.closest("button[data-go]");if(!b)return;loadSegment(parseInt(b.getAttribute("data-go"),10));});
+
+  loadSegment(0);
+})(); }
+</script>
+
+</body>
+</html>
