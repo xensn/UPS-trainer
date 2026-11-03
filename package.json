@@ -1,0 +1,12 @@
+{
+  "name": "gxt5-fault-trainer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Scenario-based trainer for serviceability checks on the Liebert GXT5 6 kVA UPS. The site itself needs no install; this file is only for running the tests.",
+  "scripts": {
+    "test": "node tests/run-all.js"
+  },
+  "devDependencies": {
+    "playwright": "1.56.0"
+  }
+}
