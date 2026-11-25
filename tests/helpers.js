@@ -59,7 +59,7 @@ async function openTrainer(browser, options = {}) {
     taskHeading: () => page.textContent("#sideTop .task-h"),
     quizText: () => page.textContent("#quizPane"),
     /** Move the fake clock forward (only when opened with fakeClock). */
-    wait: (ms) => page.clock.runFor(ms),
+    wait: (ms) => (options.fakeClock ? page.clock.runFor(ms) : page.waitForTimeout(ms)),
     close: () => context.close()
   };
   return t;
@@ -67,11 +67,14 @@ async function openTrainer(browser, options = {}) {
 
 /** Finish one guided check by pressing the right buttons. */
 const CHECK_STEPS = {
-  async status(t) { await t.press("enter", "down", "down", "enter"); await t.bench("mains", "1"); },
+  // Main menu order: Status, Settings, Control, Log, About, Maintenance
+  async status(t) { await t.press("enter", "down", "down", "down", "enter"); await t.bench("mains", "1"); },
   async endurance(t) {
-    await t.press("enter", "down", "enter", "enter");        // Control > Start battery test
-    await t.press("enter", "enter", "down", "down");         // Status > Battery tab
-    await t.press("esc", "down", "enter", "enter");          // back > Control > Stop battery test
+    await t.press("enter", "down", "down", "down", "down", "enter", "down", "down"); // About > Battery age
+    await t.press("esc", "esc");                                     // back to the home page (runtime)
+    await t.press("enter", "down", "down", "enter", "enter");        // Control > Start battery test
+    await t.press("enter", "enter", "down", "down");                 // Status > Battery tab
+    await t.press("esc", "down", "down", "enter", "enter");          // back > Control > Stop battery test
   },
   async load(t) {
     await t.press("enter", "enter", "up");                   // Status > Load tab
@@ -85,10 +88,11 @@ const CHECK_STEPS = {
     await t.press("power", "enter");                         // Turn on UPS (normal)
   },
   async reset(t) {
-    await t.press("enter", "down", "enter", "down", "enter"); // Clear faults (refused)
+    await t.press("enter", "down", "down", "enter", "down", "enter"); // Clear faults (refused)
     await t.bench("cooling", "1");                             // fix the cause
-    await t.press("esc", "enter", "down", "enter", "down", "enter"); // Clear faults (works)
+    await t.press("esc", "enter", "down", "down", "enter", "down", "enter"); // Clear faults (works)
     await t.press("power", "enter");                          // Turn on UPS
+    await t.wait(1700);                                       // inverter starting (RUN blinks)
   }
 };
 

@@ -137,12 +137,30 @@
     if (s.muted && s.mutedFor !== d.mode) s.muted = false;
     var active = d.buzzer !== "off", silenced = active && E.isSilenced(s), audible = active && !silenced;
 
-    el.ledRun.className = "led" + (d.run === "on" ? " is-run" : "");
+    el.ledRun.className = "led" + (d.run === "on" ? " is-run" : (d.run === "blink" ? " is-blink" : ""));
+    if (s.starting) scheduleStartDone(s);
     el.ledAlarm.className = "led" + (d.alarm === "amber" ? " is-amber" : (d.alarm === "red" ? " is-red" : ""));
     el.buzzer.className = "buzzer" + (active ? " on" + (audible ? " pulse" : "") + (d.buzzer === "fast" ? " fast" : "") : "");
     el.buzzer.textContent = silenced ? "BUZZER (silenced)" : "BUZZER";
     el.lcd.innerHTML = D.renderScreen(s);
     A.setPattern(d.buzzer, audible);
+  }
+
+  /**
+   * After "Turn on UPS" the inverter takes a moment to start (RUN LED blinks,
+   * Table 2). When it is done, update the check or test as if an action happened.
+   */
+  var startTimer = null;
+  function scheduleStartDone(s) {
+    if (startTimer) return;
+    startTimer = setTimeout(function () {
+      startTimer = null;
+      if (view.state !== s || !s.starting) return;
+      var finish = function () { E.finishStart(s); };
+      if (view.segment.kind === "check") checkAction(finish);
+      else if (view.segment.kind === "test" && run.running) testAction(finish);
+      else { finish(); renderPanel(); }
+    }, E.START_MS);
   }
 
   /** Draw the bench controls this segment uses: "mains", "load", "cooling". */

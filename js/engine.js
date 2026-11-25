@@ -18,8 +18,24 @@
      CONSTANTS
      ========================================================================= */
 
-  /** Items on the LCD main menu, in order. */
-  var MAIN_MENU = ["Status", "Control", "Log"];
+  /** Items on the LCD main menu, in order (inspection procedure, Figure 20).
+   *  Shown as a 3 x 2 grid; UP / DOWN step through them in this order. */
+  var MAIN_MENU = ["Status", "Settings", "Control", "Log", "About", "Maintenance"];
+
+  /** Tabs on the About screen, in order (inspection procedure, Figure 22). */
+  var ABOUT_TABS = ["Product", "Efficiency", "Battery age"];
+
+  /** Battery State-Of-Health shown on About → Battery age. Pass mark is 60%. */
+  var SOH_PERCENT = 96;
+  var SOH_MIN = 60;
+
+  /** Estimated runtime the inspection requires (minutes), and the load below
+   *  which the runtime estimate is not reliable (percent). */
+  var RUNTIME_MIN = 15;
+  var LOW_LOAD_PCT = 10;
+
+  /** How long the RUN LED blinks while the inverter starts (ms). */
+  var START_MS = 1500;
 
   /** Tabs on the Status screen, in order. */
   var STATUS_TABS = ["Input", "Bypass", "Battery", "Output", "Load"];
@@ -47,6 +63,7 @@
    *   faultSub         optional second line for the fault screen
    *   faultCauseActive true while the cause of the fault is still present
    *   outputOff        UPS output switched off (standby)
+   *   starting         inverter starting after "Turn on UPS" (RUN LED blinks)
    *   forceBattery     UPS internal failure: on battery even though mains is present
    *   muted, mutedFor  alarm silenced, and for which mode
    *   lastEvent        name of the last thing that happened (used by checks/tests)
@@ -62,6 +79,7 @@
       faultSub: null,
       faultCauseActive: false,
       outputOff: false,
+      starting: false,
       forceBattery: false,
       muted: false,
       mutedFor: null,
@@ -86,6 +104,7 @@
   function deriveStatus(s) {
     if (s.faultLatched)               return { mode: "FAULT",    run: "off", alarm: "red",   buzzer: "fast" };
     if (s.outputOff)                  return { mode: "OFFLINE",  run: "off", alarm: "off",   buzzer: "off"  };
+    if (s.starting)                   return { mode: "STARTING", run: "blink", alarm: "off", buzzer: "off"  };
     if (s.bypassEngaged && !s.mains)  return { mode: "NOOUTPUT", run: "off", alarm: "red",   buzzer: "fast" };
     if (s.bypassEngaged)              return { mode: "BYPASS",   run: "on",  alarm: "amber", buzzer: "slow" };
     if (!s.mains || s.batteryTesting || s.forceBattery)
@@ -97,7 +116,7 @@
   /** True when the UPS output is not supplying the load. */
   function isOutputOff(s) {
     var m = deriveStatus(s).mode;
-    return m === "FAULT" || m === "OFFLINE" || m === "NOOUTPUT";
+    return m === "FAULT" || m === "OFFLINE" || m === "NOOUTPUT" || m === "STARTING";
   }
 
   /** Load as a percentage of the rated output. */
@@ -108,6 +127,17 @@
   /** Rough backup time in minutes for the present load (shorter at higher load). */
   function backupMinutes(s) {
     return Math.max(1, Math.round(54 / Math.max(s.loadKW, 0.5)));
+  }
+
+  /** True when the inverter has finished starting (called by the page timer). */
+  function finishStart(s) {
+    s.starting = false;
+    s.lastEvent = "started";
+  }
+
+  /** True when the About screen is showing the named tab. */
+  function isOnAboutTab(s, tab) {
+    return s.view.name === "about" && ABOUT_TABS[s.view.tab || 0] === tab;
   }
 
   /** True when the current alarm has been silenced with ESC or Mute. */
@@ -198,10 +228,17 @@
   function runPowerOption(s, option) {
     if (option === "Turn ON to bypass" && s.mains) { s.bypassEngaged = true; s.lastEvent = "to-bypass"; }
     else if (option === "Turn on UPS (normal)")    { s.bypassEngaged = false; s.lastEvent = "to-normal"; }
-    else if (option === "Turn on UPS")             { s.outputOff = false; s.lastEvent = "power-on"; }
+    else if (option === "Turn on UPS")             {
+      s.lastEvent = "power-on";
+      if (s.outputOff && !s.faultLatched) s.starting = true;   // RUN blinks while the inverter starts
+      s.outputOff = false;
+    }
     else if (option === "Turn off UPS")            { s.outputOff = true; s.lastEvent = "power-off"; }
     s.view = { name: "home" };
   }
+
+  /** Screens opened from the main menu, and where ESC puts the menu cursor. */
+  var MAIN_SCREENS = { status: 0, settings: 1, control: 2, log: 3, about: 4, maintenance: 5 };
 
   /**
    * Press a front-panel button: "power", "esc", "up", "down" or "enter".
@@ -215,7 +252,7 @@
 
     if (btn === "esc") {
       if (n === "home") { s.muted = true; s.mutedFor = deriveStatus(s).mode; s.lastEvent = "silence"; }
-      else if (n === "status" || n === "control" || n === "log") s.view = { name: "menu", sel: 0 };
+      else if (MAIN_SCREENS[n] !== undefined) s.view = { name: "menu", sel: MAIN_SCREENS[n] };
       else s.view = { name: "home" };
       return s;
     }
@@ -227,6 +264,7 @@
       var wrap = function (i, len) { return (i + dir + len) % len; };
       if (n === "menu")         v.sel = wrap(v.sel, MAIN_MENU.length);
       else if (n === "status")  v.tab = wrap(v.tab || 0, STATUS_TABS.length);
+      else if (n === "about")   v.tab = wrap(v.tab || 0, ABOUT_TABS.length);
       else if (n === "control") v.sel = wrap(v.sel, controlItems(s).length);
       else if (n === "dialog")  v.sel = wrap(v.sel, powerOptions(s).length);
       return s;
@@ -235,13 +273,16 @@
     if (btn === "enter") {
       if (n === "home") s.view = { name: "menu", sel: 0 };
       else if (n === "menu") {
-        if (v.sel === 0) s.view = { name: "status", tab: 0 };
-        else if (v.sel === 1) s.view = { name: "control", sel: 0 };
-        else s.view = { name: "log" };
+        var item = MAIN_MENU[v.sel];
+        if (item === "Status") s.view = { name: "status", tab: 0 };
+        else if (item === "Control") s.view = { name: "control", sel: 0 };
+        else if (item === "Log") s.view = { name: "log" };
+        else if (item === "About") s.view = { name: "about", tab: 0 };
+        else s.view = { name: item === "Settings" ? "settings" : "maintenance" };
       }
       else if (n === "control") runControl(s, controlItems(s)[v.sel]);
       else if (n === "dialog")  runPowerOption(s, powerOptions(s)[v.sel]);
-      else if (n === "message") s.view = { name: "home" };
+      else if (n === "message" || n === "settings" || n === "maintenance") s.view = { name: "home" };
       return s;
     }
     return s;
@@ -280,6 +321,12 @@
   GXT5.engine = {
     MAIN_MENU: MAIN_MENU,
     STATUS_TABS: STATUS_TABS,
+    ABOUT_TABS: ABOUT_TABS,
+    SOH_PERCENT: SOH_PERCENT,
+    SOH_MIN: SOH_MIN,
+    RUNTIME_MIN: RUNTIME_MIN,
+    LOW_LOAD_PCT: LOW_LOAD_PCT,
+    START_MS: START_MS,
     RATED_KW: RATED_KW,
     createState: createState,
     deriveStatus: deriveStatus,
@@ -288,6 +335,8 @@
     backupMinutes: backupMinutes,
     isSilenced: isSilenced,
     isOnStatusTab: isOnStatusTab,
+    isOnAboutTab: isOnAboutTab,
+    finishStart: finishStart,
     controlItems: controlItems,
     powerOptions: powerOptions,
     currentAlarms: currentAlarms,

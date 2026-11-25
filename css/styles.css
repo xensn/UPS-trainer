@@ -171,6 +171,10 @@ button { font-family: inherit; }
 .led.is-run { background: var(--run); box-shadow: 0 0 8px rgba(47,164,90,.8); }
 .led.is-amber { background: var(--alarm); box-shadow: 0 0 8px rgba(230,164,0,.85); }
 .led.is-red { background: var(--fault); box-shadow: 0 0 9px rgba(210,59,59,.9); }
+/* RUN blinking: inverter starting */
+.led.is-blink { animation: ledblink .5s steps(1) infinite; }
+@keyframes ledblink { 0% { background: var(--run); box-shadow: 0 0 8px rgba(47,164,90,.8); } 50% { background: var(--led-off); box-shadow: inset 0 0 2px rgba(0,0,0,.6); } }
+@media (prefers-reduced-motion: reduce) { .led.is-blink { animation-duration: 1s; } }
 .led-label { font-size: 10px; letter-spacing: .1em; color: var(--etch); font-weight: 600; }
 
 .buzzer { margin-left: auto; font-size: 10px; letter-spacing: .1em; font-weight: 600; color: var(--led-off); border: 1px solid currentColor; border-radius: 5px; padding: 3px 7px; }
@@ -222,6 +226,13 @@ button { font-family: inherit; }
 .lcd-tabs span { flex: 1; text-align: center; font-size: 11.5px; font-weight: 700; padding: 4px 2px; border-radius: 4px; background: #d4ddd7; color: #3b4f44; }
 .lcd-tabs span.on { background: #13211b; color: #e6ece7; }
 
+/* Main menu: top bar (ECO-mode indicator, ambient temperature, date and time) and 3 x 2 grid */
+.lcd-topbar { display: flex; gap: 10px; align-items: center; justify-content: flex-end; font-size: 11px; color: #3b4f44; margin: -4px 0 6px; }
+.lcd-topbar .eco { margin-right: auto; font-weight: 800; font-size: 10px; letter-spacing: .06em; color: #9aa8a0; border: 1px solid #b4c1ba; border-radius: 3px; padding: 0 4px; }
+.lcd-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; font-size: 12.5px; }
+.lcd-grid span { text-align: center; padding: 9px 2px; border-radius: 4px; background: #d4ddd7; font-weight: 700; color: #2e4a3b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lcd-grid span.sel { background: #13211b; color: #e6ece7; }
+
 /* Rows, lists, messages */
 .lcd-rows { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .lcd-rows-gap { margin-top: 8px; }
@@ -243,7 +254,7 @@ button { font-family: inherit; }
 .flow svg { width: 100%; height: auto; display: block; }
 .flow .seg { stroke: #b4c1ba; stroke-width: 2; fill: none; }
 .flow .seg.live { stroke: #1f7a43; stroke-width: 2.5; }
-.flow .seg.livewarn { stroke: #9a6a00; stroke-width: 2.5; }
+.flow .batt-info { font-size: 9.5px; font-weight: 700; fill: #1f7a43; }
 .flow .node { fill: #d7e0da; stroke: #7d8f86; stroke-width: 1; }
 .flow .node.live { fill: #cfe6d8; stroke: #1f7a43; }
 .flow .node.dim { fill: #dde3df; stroke: #b4bfb8; }

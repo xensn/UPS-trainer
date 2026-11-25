@@ -68,14 +68,14 @@
           path: ["Bench: Mains breaker > [CLOSED]"],
           goal: "Restore the supply and confirm the unit is healthy.",
           test: function (s) { return s.mains && E.deriveStatus(s).mode === "ONLINE"; },
-          result: { seeing: "Back to ON LINE, ALARM off. Current alarms now read none.",
-                    why: "With mains back in range the UPS returns to normal automatically. Green with no alarms is your baseline." }
+          result: { seeing: "Back to ON LINE: RUN lit, ALARM not lit. Current alarms now read none.",
+                    why: "With mains back in range the UPS returns to normal automatically. RUN lit with ALARM not lit is exactly what the routine inspection checks first." }
         }
       ]
     },
 
     endurance: {
-      situation: "Prove the UPS can carry its load on battery. Run the battery self-test from the panel and read the backup time it reports.",
+      situation: "Prove the battery can carry the load. Check the battery's health and estimated runtime as the routine inspection does, then run the battery self-test.",
       bench: [],
       setup: function () { return E.createState(); },
       intro: {
@@ -83,6 +83,20 @@
         why: "Normal running: the UPS conditions mains power and keeps the battery charged."
       },
       objectives: [
+        {
+          path: ["Press [ENTER] > About > [DOWN] to Battery age"],
+          goal: "Read the battery State-Of-Health (SOH).",
+          test: function (s) { return E.isOnAboutTab(s, "Battery age"); },
+          result: { seeing: "Battery age tab: SOH 96%.",
+                    why: "The inspection needs an SOH of at least 60%. Below that, the battery fails the inspection." }
+        },
+        {
+          path: ["Press [ESC] > [ESC] to the home page"],
+          goal: "Read the estimated battery runtime on the home page.",
+          test: function (s) { return s.view.name === "home"; },
+          result: { seeing: "Load 45%, estimated battery runtime 20 min.",
+                    why: "With the load above 10%, the estimated runtime must be more than 15 minutes. 20 minutes passes." }
+        },
         {
           path: ["Press [ENTER] > Control > Start battery test"],
           goal: "Start the battery self-test.",
@@ -120,8 +134,8 @@
           path: ["Press [ENTER] > Status > [UP] to Load tab"],
           goal: "Read how much of the 6 kW rating is in use.",
           test: function (s) { return E.isOnStatusTab(s, "Load"); },
-          result: { seeing: "Load percent, Sout and Pout (equal), and PF 1.00.",
-                    why: "Because PF is 1.0, kVA equals kW. Watch the single Load % figure." }
+          result: { seeing: "Sout (kVA) and Pout (kW) (equal), power factor 1.00, and Load percent (%).",
+                    why: "Because PF is 1.0, kVA equals kW. Load percent also sets the runtime check: above 10%, the home page runtime must be more than 15 minutes. At 10% or less the estimate is not reliable, but the UPS still supports at least 15 minutes." }
         },
         {
           path: ["Bench: Connected load > [+] until over 6 kW"],
@@ -154,7 +168,7 @@
           goal: "Transfer the load to bypass.",
           test: function (s) { return s.bypassEngaged && s.mains; },
           result: { seeing: "ON BYPASS, RUN green, amber ALARM, one beep a second.",
-                    why: "The load is fed from raw mains. The inverter is idle, so there is no conditioning and no battery backup." }
+                    why: "The load is fed from raw mains: the bypass line on the diagram is now the one lit green. There is no conditioning and no battery backup, so a routine inspection must find the UPS NOT in bypass." }
         },
         {
           path: ["Bench: Mains breaker > [OPEN]"],
@@ -209,8 +223,8 @@
           path: ["Press [POWER] > Turn on UPS"],
           goal: "Start the UPS.",
           test: function (s) { return E.deriveStatus(s).mode === "ONLINE"; },
-          result: { seeing: "Back to ON LINE.",
-                    why: "The UPS restarts into normal operation with the load protected." }
+          result: { seeing: "RUN blinks while the inverter starts, then stays lit: back to ON LINE.",
+                    why: "The UPS restarts into normal operation with the load protected. A blinking RUN LED means the inverter is starting; steady means the UPS has output." }
         }
       ]
     }
@@ -303,17 +317,18 @@
     { type: "tf", q: "Clear faults will clear a fault even while the cause is still present.",
       answer: 1, review: ["reset"],
       explain: "False. Clear faults only works once the cause is resolved. A reset is not a repair." },
-    { type: "mcq", q: "The battery low pre-warning gives roughly how long before end-of-discharge at full load:",
-      opts: ["About 2 minutes", "About 30 minutes", "About 2 hours", "No warning is given"],
-      answer: 0, review: ["endurance"],
-      explain: "The pre-warning gives about two minutes to shut equipment down in order before the UPS stops." },
+    { type: "mcq", q: "In the routine inspection, the battery State-Of-Health (About \u2192 Battery age) must be at least:",
+      opts: ["30%", "60%", "80%", "100%"],
+      answer: 1, review: ["endurance"],
+      explain: "SOH must be at least 60%. Below that, the battery fails the inspection." },
     { type: "mcq", q: "The supply to the UPS fails and it switches to battery. What should you do first?",
       opts: ["Transfer to bypass", "Check the backup time on Status → Battery", "Switch the UPS off", "Clear faults"],
       answer: 1, review: ["endurance", "test-mains"],
       explain: "With mains gone, bypass is not available and switching off drops the load. Check how long the battery will last, then restore the supply or shut equipment down in order." },
-    { type: "tf", q: "Transferring to bypass gives the same power conditioning as normal double-conversion mode.",
-      answer: 1, review: ["bypass"],
-      explain: "False. Bypass feeds the load from raw mains with no conditioning and no battery backup." },
+    { type: "mcq", q: "The load is above 10%. On the home page, the estimated battery runtime must be:",
+      opts: ["More than 5 minutes", "More than 15 minutes", "More than 60 minutes", "Any value; it is not checked"],
+      answer: 1, review: ["endurance", "load"],
+      explain: "Above 10% load the estimated runtime must be more than 15 minutes. At 10% or less the estimate is not reliable, but the UPS still supports at least 15 minutes." },
     { type: "mcq", q: "The endurance check is performed by:",
       opts: ["Increasing the load until it trips", "Running the battery self-test and reading the backup time", "Clearing faults", "Muting the alarm"],
       answer: 1, review: ["endurance"],
@@ -335,8 +350,7 @@
     var W = function (t) { return '<span class="hl warn">' + t + "</span>"; };
     var B = function (t) { return "<strong>" + t + "</strong>"; };
     return "" +
-      '<p class="lead">Serviceability checks confirm the UPS will protect its load and can be maintained safely. ' +
-        "Work through them in order; each one has its own segment in this trainer.</p>" +
+      '<p class="lead">Serviceability checks confirm the UPS will protect its load. Each check has its own segment in this trainer.</p>' +
       '<div class="legend" aria-label="Colour key">' +
         '<span class="lg-danger">Danger / do not</span><span class="lg-warn">Caution</span>' +
       "</div>" +
@@ -349,21 +363,27 @@
             "<li>Keep at least 100&nbsp;mm clearance at the front and rear, and keep the air inlets clear.</li>" +
           "</ul>" +
         "</div>" +
-        '<h2 class="sec sec-ok">Routine care</h2>' +
+        '<h2 class="sec sec-key">Routine inspection (monthly; quarterly if remotely monitored)</h2>' +
         "<ul>" +
-          "<li>Keep the UPS plugged in so the batteries stay charged, and operate it around 15\u201325&nbsp;\u00B0C for battery life.</li>" +
-          "<li>Check the display and log for active alarms, and note the battery replacement date.</li>" +
-          "<li>A red fault means " + D("service (Vertiv), not a field repair") + ".</li>" +
+          "<li>Panel: RUN lit, ALARM and ECO-mode light not lit, UPS " + W("not in bypass") + ".</li>" +
+          "<li>Battery: SOH " + B("at least 60%") + " (About \u2192 Battery age). Above 10% load, runtime " + B("more than 15&nbsp;min") + " (home page).</li>" +
+          "<li>External battery cabinets, if fitted: count on Status \u2192 Battery matches.</li>" +
+          "<li>Batteries: no leakage, corrosion, bulging, cracks, smell or noise. Check alarms, vents and fan.</li>" +
         "</ul>" +
       "</div><div>" +
         '<h2 class="sec sec-key">The serviceability sequence</h2>' +
         '<ol class="seg-steps">' +
-          "<li>" + B("Status check") + " \u2014 read the LEDs, the mode and the log; tell an alarm from a fault.</li>" +
-          "<li>" + B("Endurance check") + " \u2014 run the battery self-test and confirm the backup time.</li>" +
+          "<li>" + B("Status check") + " \u2014 LEDs, mode and log; alarm or fault.</li>" +
+          "<li>" + B("Endurance check") + " \u2014 SOH, runtime, battery self-test.</li>" +
           "<li>" + B("Load utilisation check") + " \u2014 confirm the load is within the 6&nbsp;kW rating.</li>" +
-          "<li>" + B("Bypass") + " \u2014 transfer to bypass and back; know that bypass gives " + D("no battery backup") + ".</li>" +
-          "<li>" + B("UPS reset (power on/off)") + " \u2014 clear a fault " + W("only once its cause is fixed") + ", then start the unit.</li>" +
+          "<li>" + B("Bypass") + " \u2014 to bypass and back; bypass gives " + D("no battery backup") + ".</li>" +
+          "<li>" + B("UPS reset (power on/off)") + " \u2014 clear a fault " + W("only once its cause is fixed") + ", then start.</li>" +
         "</ol>" +
+        '<h2 class="sec sec-ok">Routine care</h2>' +
+        "<ul>" +
+          "<li>Keep the UPS plugged in so the batteries stay charged; operate it around 15\u201325&nbsp;\u00B0C.</li>" +
+          "<li>A red fault means " + D("service (Vertiv), not a field repair") + ".</li>" +
+        "</ul>" +
         '<p class="note">After the five checks, pass the two timed scenario tests to unlock the Quiz.</p>' +
       "</div></div>";
   }

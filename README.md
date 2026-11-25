@@ -137,3 +137,22 @@ Groups: `walkthrough`, `scenarios`, `quiz`, `sound`, `security`, `fit`.
 - No logos are used.
 - Sound starts after the trainee's first click or tap (a browser rule). On iPhones the silent
   switch also mutes web pages.
+
+## Alignment with the routine UPS inspection procedure (November 2026)
+
+Checked against the unit's routine inspection procedure (paraphrased here; the source document is not
+included in this repository). Changes made to match it:
+
+| Area | Now matches the procedure |
+|---|---|
+| Flow diagram | The line carrying power is lit green in every mode (in bypass, the bypass line) |
+| Main menu | Status, Settings, Control, Log, About, Maintenance, with ECO-mode indicator, ambient temperature, date and time |
+| About → Battery age | Shows battery State-Of-Health (SOH); the inspection needs at least 60% |
+| Home page | Always shows the estimated battery runtime; above 10% load it must be more than 15 min |
+| Status → Load | Fields in screen order: Sout (kVA), Pout (kW), Power factor, Load percent (%) |
+| RUN LED | Blinks while the inverter starts after "Turn on UPS" |
+| Endurance check | Adds SOH and home-page runtime steps before the battery self-test |
+| Maintenance page | Adds the routine inspection checklist |
+| Quiz | Two questions replaced with SOH (60%) and runtime (15 min) questions |
+
+Settings and Maintenance on the LCD are shown as restricted: the procedure does not use them.

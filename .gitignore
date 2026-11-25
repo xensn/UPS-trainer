@@ -1,1 +1,11 @@
-.vercel
+# Installed packages for the tests
+node_modules/
+
+# Hosting tool settings and test output (never commit these)
+.vercel/
+test-results/
+playwright-report/
+
+# Operating system files
+.DS_Store
+Thumbs.db

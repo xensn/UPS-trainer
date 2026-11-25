@@ -26,6 +26,7 @@
     OVERLOAD: { cls: "warn", label: "ALARM · OVERLOAD" },
     FAULT:    { cls: "bad",  label: "FAULT" },
     NOOUTPUT: { cls: "bad",  label: "NO OUTPUT" },
+    STARTING: { cls: "off",  label: "INVERTER STARTING" },
     OFFLINE:  { cls: "off",  label: "STANDBY" }
   };
 
@@ -36,7 +37,9 @@
 
   /* =========================================================================
      POWER-PATH DIAGRAM — shows where the load's power is coming from
-     Lines are only coloured where power is actually flowing:
+     The line carrying power is lit green, whatever the alarm state (inspection
+     procedure, Figure 21: in bypass, the bypass line is the one lit green).
+     Lines are only lit where power is actually flowing:
        normal / overload : MAINS -> RECT/INV -> LOAD
        battery           : BATT  -> RECT/INV -> LOAD
        bypass            : MAINS -> (bypass arc) -> LOAD, the UPS is skipped
@@ -44,12 +47,15 @@
      ========================================================================= */
   function powerPath(s) {
     var mode = E.deriveStatus(s).mode;
-    var p = { mainsIn: false, toLoad: false, batt: false, bypass: false, warn: false };
-    if (mode === "ONLINE" || mode === "OVERLOAD") { p.mainsIn = true; p.toLoad = true; p.warn = mode === "OVERLOAD"; }
-    else if (mode === "BATTERY") { p.batt = true; p.toLoad = true; p.warn = true; }
-    else if (mode === "BYPASS")  { p.bypass = true; p.warn = true; }
+    var p = { mainsIn: false, toLoad: false, batt: false, bypass: false };
+    if (mode === "ONLINE" || mode === "OVERLOAD") { p.mainsIn = true; p.toLoad = true; }
+    else if (mode === "BATTERY") { p.batt = true; p.toLoad = true; }
+    else if (mode === "BYPASS")  { p.bypass = true; }
 
-    var lineCls = function (on) { return on ? (p.warn ? "seg livewarn" : "seg live") : "seg"; };
+    var lineCls = function (on) { return on ? "seg live" : "seg"; };
+    // Battery read-out beside the battery, as on the real home page (Figure 24)
+    var onBatt = mode === "BATTERY";
+    var battText = (onBatt ? "Discharge " : "Charge ") + (onBatt ? "86%" : "100%");
     var loadFed = p.toLoad || p.bypass;
     // Node styles: live (carrying power), normal (available), dim (absent / off), fault
     var mainsNode = (p.mainsIn || p.bypass) ? "node live" : (s.mains ? "node" : "node dim");
@@ -75,6 +81,7 @@
       '<text x="262" y="64" text-anchor="middle" class="' + (loadFed ? "" : "dim") + '">LOAD</text>' +
       '<rect class="' + battNode + '" x="128" y="98" width="44" height="20" rx="3"/>' +
       '<text x="150" y="112" text-anchor="middle">BATT</text>' +
+      '<text x="180" y="112" class="batt-info">' + battText + "</text>" +
       "</svg></div>";
   }
 
@@ -119,11 +126,16 @@
     if (mode === "OFFLINE") {
       return '<div class="lcd-msg"><div class="big">Standby</div><div class="sub">Output off. Press POWER to start.</div></div>';
     }
+    if (mode === "STARTING") {
+      return '<div class="lcd-msg"><div class="big">Inverter starting</div><div class="sub">The RUN LED blinks until the UPS has output.</div></div>';
+    }
     var names = { ONLINE: "ON LINE", BATTERY: "ON BATTERY", BYPASS: "ON BYPASS", OVERLOAD: "OVERLOAD", NOOUTPUT: "NO OUTPUT" };
     var tone = mode === "ONLINE" ? "ok" : (mode === "NOOUTPUT" ? "bad" : "warn");
     var pct = E.isOutputOff(s) ? 0 : E.loadPercent(s);
     var rows = row("Load", pct + "%", loadTone(pct));
-    if (mode === "BATTERY") rows += row("Backup time", E.backupMinutes(s) + " min");
+    // Estimated battery runtime is always on the home page (inspection procedure, Figure 24).
+    // On bypass or with no output the battery is not supplying the load, so no estimate.
+    if (!E.isOutputOff(s) && mode !== "BYPASS") rows += row("Est. battery runtime", E.backupMinutes(s) + " min");
     return header(names[mode], "Press ENTER for menu", tone) + powerPath(s) + '<div class="lcd-rows lcd-rows-gap">' + rows + "</div>";
   }
 
@@ -140,20 +152,60 @@
       rows = row("L-N voltage", s.mains ? "230 V" : "--- V") + row("Frequency", s.mains ? "50.0 Hz" : "--- Hz");
     } else if (tab === "Battery") {
       rows = row("Status", onBattery ? "Discharging" : "Float charging") +
-             row("Backup time", onBattery ? E.backupMinutes(s) + " min" : "--") +
+             row("Backup time", off ? "--" : E.backupMinutes(s) + " min") +
              row("Remaining cap.", onBattery ? "86%" : "100%");
     } else if (tab === "Output") {
       rows = row("L-N voltage", off ? "0 V" : "230 V") + row("Frequency", off ? "--- Hz" : "50.0 Hz") + row("Load", pct + "%", loadTone(pct));
     } else {
-      rows = row("Load percent", pct + "%", loadTone(pct)) +
-             row("Sout", (off ? 0 : s.loadKW).toFixed(2) + " kVA") +
-             row("Pout", (off ? 0 : s.loadKW).toFixed(2) + " kW") +
-             row("Power factor", "1.00");
+      // Same fields and order as the real Load page (inspection procedure, Figure 23)
+      rows = row("Sout (kVA)", (off ? 0 : s.loadKW).toFixed(2)) +
+             row("Pout (kW)", (off ? 0 : s.loadKW).toFixed(2)) +
+             row("Power factor", "1.00") +
+             row("Load percent (%)", pct.toFixed(1), loadTone(pct));
     }
     var tabs = '<div class="lcd-tabs" role="tablist">' + E.STATUS_TABS.map(function (t) {
       return '<span role="tab" aria-selected="' + (t === tab) + '" class="' + (t === tab ? "on" : "") + '">' + t + "</span>";
     }).join("") + "</div>";
     return header("STATUS", "UP / DOWN: change tab") + tabs + '<div class="lcd-rows">' + rows + "</div>";
+  }
+
+  /**
+   * Main menu: six items in a 3 x 2 grid, as on the real screen (Figure 20).
+   * Top bar: ECO-mode indicator (not lit in normal operation), ambient
+   * temperature, and date and time.
+   */
+  function menuScreen(s) {
+    var now = new Date();
+    var two = function (n) { return (n < 10 ? "0" : "") + n; };
+    var stamp = now.getFullYear() + "-" + two(now.getMonth() + 1) + "-" + two(now.getDate()) + " " + two(now.getHours()) + ":" + two(now.getMinutes());
+    var top = '<div class="lcd-topbar"><span class="eco" title="ECO-mode indicator (not lit)">ECO</span>' +
+      "<span>25.4 \u00B0C</span><span>" + stamp + "</span></div>";
+    var grid = '<div class="lcd-grid">' + E.MAIN_MENU.map(function (item, i) {
+      return '<span class="' + (i === s.view.sel ? "sel" : "") + '">' + item + "</span>";
+    }).join("") + "</div>";
+    return top + header("MAIN MENU", "ENTER to select") + grid;
+  }
+
+  /** About screen with Product / Efficiency / Battery age tabs (Figure 22). */
+  function aboutScreen(s) {
+    var tab = E.ABOUT_TABS[s.view.tab || 0], rows;
+    if (tab === "Product") rows = row("Model", "Liebert GXT5") + row("Rating", "6 kVA / 6 kW");
+    else if (tab === "Efficiency") rows = row("Efficiency", "Not part of this check");
+    else rows = row("State-Of-Health SOH (%)", String(E.SOH_PERCENT), E.SOH_PERCENT >= E.SOH_MIN ? "ok" : "bad") +
+                row("Pass mark", "at least " + E.SOH_MIN + "%");
+    return header("ABOUT", "UP / DOWN: change tab") + tabStrip(E.ABOUT_TABS, tab) + '<div class="lcd-rows">' + rows + "</div>";
+  }
+
+  /** Settings and Maintenance: restricted, not used in the inspection. */
+  function restrictedScreen(title) {
+    return header(title, "ESC to go back") +
+      '<div class="lcd-msg"><div class="big">Restricted</div><div class="sub">Not used in the routine inspection.</div></div>';
+  }
+
+  function tabStrip(tabs, current) {
+    return '<div class="lcd-tabs" role="tablist">' + tabs.map(function (t) {
+      return '<span role="tab" aria-selected="' + (t === current) + '" class="' + (t === current ? "on" : "") + '">' + t + "</span>";
+    }).join("") + "</div>";
   }
 
   function logScreen(s) {
@@ -171,7 +223,10 @@
     var v = s.view, body;
     switch (v.name) {
       case "message": body = messageScreen(s); break;
-      case "menu":    body = header("MAIN MENU", "ENTER to select") + list(E.MAIN_MENU, v.sel); break;
+      case "menu":    body = menuScreen(s); break;
+      case "about":   body = aboutScreen(s); break;
+      case "settings": body = restrictedScreen("SETTINGS"); break;
+      case "maintenance": body = restrictedScreen("MAINTENANCE"); break;
       case "control": body = header("CONTROL", "ENTER to select") + list(E.controlItems(s), v.sel); break;
       case "dialog":  body = header("POWER", "ENTER to select") + list(E.powerOptions(s), v.sel); break;
       case "log":     body = logScreen(s); break;
